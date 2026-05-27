@@ -1,0 +1,33 @@
+{
+  "sites": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "feature_cols": [
+    "year",
+    "month",
+    "day",
+    "hour",
+    "O3_forecast",
+    "NO2_forecast",
+    "T_forecast",
+    "q_forecast",
+    "u_forecast",
+    "v_forecast",
+    "w_forecast",
+    "NO2_satellite",
+    "HCHO_satellite",
+    "ratio_satellite"
+  ],
+  "target_cols": [
+    "O3_target",
+    "NO2_target"
+  ],
+  "train_T": 30289,
+  "unseen_T": 13008
+}

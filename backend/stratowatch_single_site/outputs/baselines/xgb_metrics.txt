@@ -1,0 +1,5 @@
+✅ XGB TEST METRICS (Real Units, Residual Learning)
+MAE : 17.9530
+MSE : 712.4161
+RMSE: 26.6911
+R2  : 0.4208

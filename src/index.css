@@ -1,0 +1,80 @@
+@import "tailwindcss";
+body {
+  font-family: 'Orbitron', sans-serif;
+}
+/* premium hover card */
+.premium-card {
+  border-radius: 24px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.premium-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(56,189,248,0.25);
+  box-shadow:
+    0 24px 80px rgba(0,0,0,0.65),
+    0 0 0 1px rgba(56,189,248,0.18),
+    0 0 40px rgba(56,189,248,0.10);
+}
+
+.metric-tile {
+  border-radius: 18px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.metric-tile:hover {
+  transform: translateY(-4px);
+  border-color: rgba(56,189,248,0.25);
+  box-shadow:
+    0 18px 40px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(56,189,248,0.14),
+    0 0 28px rgba(56,189,248,0.10);
+}
+.glow-hover {
+  transition: all 0.3s ease;
+}
+.glow-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.25);
+}
+
+@keyframes rotateSatellite {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-satellite {
+  animation: rotateSatellite 12s linear infinite;
+}
+
+@keyframes glowPulse {
+  0% { box-shadow: 0 0 0 rgba(56,189,248,0.0); }
+  50% { box-shadow: 0 0 28px rgba(56,189,248,0.18); }
+  100% { box-shadow: 0 0 0 rgba(56,189,248,0.0); }
+}
+.glow-panel {
+  animation: glowPulse 6s ease-in-out infinite;
+}
+
+.nav-link {
+  position: relative;
+}
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0%;
+  height: 2px;
+  background: #00ffff;
+  transition: width 0.3s ease;
+}
+.nav-link:hover::after {
+  width: 100%;
+}
+
+.satellite-glow {
+  filter: drop-shadow(0 0 6px rgba(0,255,255,0.6));
+}
