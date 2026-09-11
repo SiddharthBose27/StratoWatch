@@ -48,3 +48,7 @@ __pycache__/
 # Data Files
 *.npz
 *.npy
+
+# Local StratoWatch data / oversized model artifacts
+backend/stratowatch_data/
+backend/stratowatch_single_site/outputs/final_baselines/random_forest/random_forest_final.joblib

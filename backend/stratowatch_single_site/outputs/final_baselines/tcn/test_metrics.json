@@ -1,0 +1,106 @@
+{
+  "model": "tcn",
+  "evaluation_type": "final_test_real_units",
+  "overall": {
+    "mae": 0.5587867058112489,
+    "rmse": 0.7426609903895335,
+    "r2": 0.027335108241922756
+  },
+  "per_target": {
+    "O3": {
+      "mae": 0.5822441260355024,
+      "rmse": 0.7364890523221013,
+      "r2": -1.2397950423993498
+    },
+    "NO2": {
+      "mae": 0.5353292855869954,
+      "rmse": 0.7487820571450805,
+      "r2": 0.23241079690316735
+    }
+  },
+  "horizon_wise": {
+    "H+1": {
+      "mae": 0.5136189775986513,
+      "rmse": 0.6946019645634001,
+      "r2": 0.1485891718183635
+    },
+    "H+2": {
+      "mae": 0.5225263734972015,
+      "rmse": 0.7050553990336603,
+      "r2": 0.12299959149086115
+    },
+    "H+3": {
+      "mae": 0.581440343780432,
+      "rmse": 0.7583293540294431,
+      "r2": -0.014274071972630198
+    },
+    "H+4": {
+      "mae": 0.5604710724347138,
+      "rmse": 0.74646997726537,
+      "r2": 0.01745844246481265
+    },
+    "H+5": {
+      "mae": 0.5962490836777655,
+      "rmse": 0.7792027432464579,
+      "r2": -0.07031902602211915
+    },
+    "H+6": {
+      "mae": 0.5784143838787293,
+      "rmse": 0.768283361639602,
+      "r2": -0.040248147017094116
+    }
+  },
+  "metadata": {
+    "dataset": "official_phase_7_test",
+    "evaluation": "real_unit_masked",
+    "retraining": false,
+    "model_frozen": true,
+    "input_features": 134,
+    "history_hours": 24,
+    "forecast_horizon_hours": 6,
+    "targets": [
+      "O3",
+      "NO2"
+    ],
+    "channels": [
+      64,
+      64,
+      64
+    ],
+    "kernel_size": 3,
+    "dilations": [
+      1,
+      2,
+      4
+    ],
+    "dropout": 0.2,
+    "test_samples": 6464,
+    "x_test_shape": [
+      6464,
+      24,
+      134
+    ],
+    "y_test_shape": [
+      6464,
+      6,
+      2
+    ],
+    "mask_shape": [
+      6464,
+      6,
+      2
+    ],
+    "parameter_count": 101132,
+    "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_baselines/tcn/tcn_best.pt",
+    "prediction_runtime_seconds": 3.1974053382873535,
+    "research_contract": {
+      "features": 134,
+      "tin": 24,
+      "tout": 6,
+      "targets": [
+        "O3",
+        "NO2"
+      ]
+    }
+  }
+}

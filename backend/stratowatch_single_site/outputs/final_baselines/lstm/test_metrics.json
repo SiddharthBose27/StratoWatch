@@ -1,0 +1,71 @@
+{
+  "model": "lstm",
+  "model_type": "LSTMForecaster",
+  "evaluation_type": "final_test_real_units",
+  "overall": {
+    "MAE": 0.6615621447563171,
+    "RMSE": 0.829629123210907,
+    "R2": -0.2138080596923828
+  },
+  "per_target": {
+    "O3": {
+      "MAE": 0.7544219493865967,
+      "RMSE": 0.8809623122215271,
+      "R2": -2.2047224044799805
+    },
+    "NO2": {
+      "MAE": 0.5687023997306824,
+      "RMSE": 0.774902880191803,
+      "R2": 0.17792284488677979
+    }
+  },
+  "horizon_wise": {
+    "horizon_1": {
+      "MAE": 0.62870192527771,
+      "RMSE": 0.7964101433753967,
+      "R2": -0.11928510665893555
+    },
+    "horizon_2": {
+      "MAE": 0.6520678997039795,
+      "RMSE": 0.8181548118591309,
+      "R2": -0.1809302568435669
+    },
+    "horizon_3": {
+      "MAE": 0.667921781539917,
+      "RMSE": 0.8345790505409241,
+      "R2": -0.22849822044372559
+    },
+    "horizon_4": {
+      "MAE": 0.6632503271102905,
+      "RMSE": 0.8320074677467346,
+      "R2": -0.2206205129623413
+    },
+    "horizon_5": {
+      "MAE": 0.667310893535614,
+      "RMSE": 0.8363170623779297,
+      "R2": -0.23297476768493652
+    },
+    "horizon_6": {
+      "MAE": 0.6901204586029053,
+      "RMSE": 0.8589972853660583,
+      "R2": -0.30040204524993896
+    }
+  },
+  "metadata": {
+    "direct_target_prediction": true,
+    "residual_learning": false,
+    "dataset": "official_phase7_test",
+    "features": 134,
+    "input_hours": 24,
+    "forecast_hours": 6,
+    "targets": [
+      "O3",
+      "NO2"
+    ],
+    "test_samples": 6464,
+    "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_baselines/lstm/lstm_best.pt",
+    "best_epoch": 1,
+    "best_validation_mse": 0.21366153464755508,
+    "prediction_runtime_seconds": 0.6766171455383301
+  }
+}

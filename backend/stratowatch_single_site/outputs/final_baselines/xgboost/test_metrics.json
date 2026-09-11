@@ -1,0 +1,73 @@
+{
+  "model": "xgboost",
+  "evaluation_type": "final_test_real_units",
+  "overall": {
+    "MAE": 0.4039208207321622,
+    "RMSE": 0.5906467182836711,
+    "R2": 0.38476986565076177
+  },
+  "per_target": {
+    "O3": {
+      "MAE": 0.3044795932407722,
+      "RMSE": 0.4768884839504921,
+      "R2": 0.060905278493842974
+    },
+    "NO2": {
+      "MAE": 0.5033620482235522,
+      "RMSE": 0.6857874783881243,
+      "R2": 0.3561316126837163
+    }
+  },
+  "horizon_wise": {
+    "horizon_1": {
+      "MAE": 0.3497105362454602,
+      "RMSE": 0.5157254550136073,
+      "R2": 0.5306419342748542
+    },
+    "horizon_2": {
+      "MAE": 0.37305370078891736,
+      "RMSE": 0.5469192489656618,
+      "R2": 0.47228463731155024
+    },
+    "horizon_3": {
+      "MAE": 0.3967619849473717,
+      "RMSE": 0.5810031730321203,
+      "R2": 0.4046167863592304
+    },
+    "horizon_4": {
+      "MAE": 0.4224736929808428,
+      "RMSE": 0.6144659159412785,
+      "R2": 0.3342336564680569
+    },
+    "horizon_5": {
+      "MAE": 0.43638730564068223,
+      "RMSE": 0.6302501357566873,
+      "R2": 0.29977410960293005
+    },
+    "horizon_6": {
+      "MAE": 0.4451377037896988,
+      "RMSE": 0.644778708185372,
+      "R2": 0.26731811752054757
+    }
+  },
+  "metadata": {
+    "model_type": "XGBRegressor",
+    "number_of_regressors": 12,
+    "target_mode": "direct_target_prediction",
+    "residual_learning": false,
+    "dataset": "official_phase7_test",
+    "input_window_hours": 24,
+    "forecast_horizon_hours": 6,
+    "feature_count": 134,
+    "flattened_input_features": 3216,
+    "target_count": 2,
+    "targets": [
+      "O3",
+      "NO2"
+    ],
+    "test_samples": 6464,
+    "model_directory": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_baselines/xgboost/models",
+    "prediction_seconds": 0.12241721153259277,
+    "evaluation_seconds": 1.9547502994537354
+  }
+}

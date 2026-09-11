@@ -1,0 +1,23 @@
+{
+  "project": "StratoWatch 2.0",
+  "purpose": "Final research figures from frozen evaluation artifacts",
+  "training_performed": false,
+  "evaluation_performed": false,
+  "single_site_source": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_baselines/final_single_site_results.json",
+  "multi_site_source": "Frozen final multi-site evaluation results",
+  "figures": [
+    "01_single_site_mae.png",
+    "02_single_site_rmse.png",
+    "03_single_site_r2.png",
+    "04_single_site_o3_no2_mae.png",
+    "05_single_site_horizon_mae.png",
+    "06_multi_site_mae.png",
+    "07_multi_site_rmse.png",
+    "08_multi_site_r2.png",
+    "09_multi_site_o3_no2_mae.png",
+    "10_multi_site_horizon_mae.png",
+    "11_multi_site_horizon_rmse.png",
+    "12_prediction_vs_actual_no2.png",
+    "12_prediction_vs_actual_o3.png"
+  ]
+}

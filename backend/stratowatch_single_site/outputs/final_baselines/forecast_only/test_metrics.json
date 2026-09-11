@@ -1,0 +1,67 @@
+{
+  "model": "forecast_only",
+  "definition": "Persist the latest available O3_forecast and NO2_forecast values from the final timestep of the 24-hour input window across H+1...H+6.",
+  "tin": 24,
+  "tout": 6,
+  "num_features": 134,
+  "targets": [
+    "O3_target",
+    "NO2_target"
+  ],
+  "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_scaled.npz",
+  "feature_scaler": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_feature_scaler.pkl",
+  "target_scaler": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_target_scaler.pkl",
+  "forecast_feature_indices": {
+    "O3_forecast": 4,
+    "NO2_forecast": 5
+  },
+  "overall": {
+    "MAE": 1.238378522168081,
+    "RMSE": 1.5116150251075295,
+    "R2": -3.0296229901093126
+  },
+  "per_target": {
+    "O3_target": {
+      "MAE": 1.300792935861487,
+      "RMSE": 1.4397603257278675,
+      "R2": -7.559651670241674
+    },
+    "NO2_target": {
+      "MAE": 1.175964108474675,
+      "RMSE": 1.5802057374663776,
+      "R2": -2.4185762254932954
+    }
+  },
+  "horizon_wise": {
+    "horizon_1": {
+      "MAE": 1.2664896048369518,
+      "RMSE": 1.5573753628431428,
+      "R2": -3.280098410081087
+    },
+    "horizon_2": {
+      "MAE": 1.2552314770663806,
+      "RMSE": 1.5378865301460265,
+      "R2": -3.1725533349920108
+    },
+    "horizon_3": {
+      "MAE": 1.241865261711073,
+      "RMSE": 1.5156469714792966,
+      "R2": -3.0516852569071755
+    },
+    "horizon_4": {
+      "MAE": 1.2306753091714495,
+      "RMSE": 1.4980267663490352,
+      "R2": -2.956993933173775
+    },
+    "horizon_5": {
+      "MAE": 1.221736880951796,
+      "RMSE": 1.4845910714515007,
+      "R2": -2.8853127964824927
+    },
+    "horizon_6": {
+      "MAE": 1.2142725992708356,
+      "RMSE": 1.4744783213406696,
+      "R2": -2.8315180715647963
+    }
+  }
+}

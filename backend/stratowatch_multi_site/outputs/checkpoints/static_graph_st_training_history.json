@@ -1,0 +1,61 @@
+{
+  "model_type": "StaticGraphSTTransformer",
+  "seed": 42,
+  "best_epoch": 1,
+  "best_val_mae": 0.48821993753470583,
+  "dataset": "splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+  "architecture": {
+    "num_features": 28,
+    "num_targets": 2,
+    "num_sites": 7,
+    "tin": 24,
+    "tout": 6,
+    "d_model": 128,
+    "nhead": 4,
+    "num_layers_time": 2,
+    "num_layers_space": 2,
+    "dropout": 0.1
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_huber": 0.21917659045645843,
+      "val_mae": 0.48821993753470583,
+      "val_rmse": 0.6736902146267545,
+      "val_valid_count": 319032.0,
+      "elapsed_seconds": 215.8939769268036
+    },
+    {
+      "epoch": 2,
+      "train_huber": 0.16094250106865005,
+      "val_mae": 0.6014336732568657,
+      "val_rmse": 0.8534133111768745,
+      "val_valid_count": 319032.0,
+      "elapsed_seconds": 210.3048369884491
+    },
+    {
+      "epoch": 3,
+      "train_huber": 0.14029700503778253,
+      "val_mae": 0.5278186823444754,
+      "val_rmse": 0.7781492206459847,
+      "val_valid_count": 319032.0,
+      "elapsed_seconds": 199.5839319229126
+    },
+    {
+      "epoch": 4,
+      "train_huber": 0.1270129132415309,
+      "val_mae": 0.5266016536838818,
+      "val_rmse": 0.7721594298043487,
+      "val_valid_count": 319032.0,
+      "elapsed_seconds": 223.52796387672424
+    },
+    {
+      "epoch": 5,
+      "train_huber": 0.11577371408655124,
+      "val_mae": 0.5327919976498855,
+      "val_rmse": 0.7748868381781213,
+      "val_valid_count": 319032.0,
+      "elapsed_seconds": 217.60637521743774
+    }
+  ]
+}

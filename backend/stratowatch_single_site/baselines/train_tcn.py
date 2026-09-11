@@ -1,267 +1,1486 @@
-# baselines/train_tcn.py
-# Purpose:
-#   Train a TCN (Temporal Convolutional Network) baseline on sequence input (N, T, F)
-#   Predict residual targets (N, 2) then reconstruct real targets: y = forecast + residual
-#
-# Run:
-#   python3 -m baselines.train_tcn
+"""
+StratoWatch — Final Single-Site TCN Baseline
 
-import os
+Research contract:
+    Input:
+        24 hours × 134 features
+
+    Output:
+        6 forecast hours × 2 targets
+        O3 + NO2
+
+    Dataset:
+        Official Phase 7 artifact
+
+    Evaluation:
+        Real-unit masked MAE
+        Real-unit masked RMSE
+        Real-unit masked R²
+        Per-target metrics
+        Horizon-wise metrics
+
+This is a DIRECT-TARGET model.
+It does NOT use the old residual-learning pipeline.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import time
+from pathlib import Path
+from typing import Dict
+
 import numpy as np
-import joblib
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from baselines.common_data import load_feature_list_and_forecast_from_X
+# ============================================================
+# IMPORT SHARED DATA LOADER
+# ============================================================
+
+try:
+    from common_data import load_splits, inverse_transform_targets
+except ImportError:
+    from baselines.common_data import load_splits, inverse_transform_targets
 
 
-# -------------------------
-# TCN Building Blocks
-# -------------------------
-class Chomp1d(nn.Module):
-    """Remove extra padding to keep causal convolution output length = input length."""
-    def __init__(self, chomp_size: int):
-        super().__init__()
-        self.chomp_size = chomp_size
+# ============================================================
+# PATHS
+# ============================================================
 
-    def forward(self, x):
-        # x: (B, C, T)
-        return x[:, :, :-self.chomp_size] if self.chomp_size > 0 else x
+BASE_DIR = Path(__file__).resolve().parent
+SINGLE_SITE_DIR = BASE_DIR.parent
 
+OUTPUT_DIR = (
+    SINGLE_SITE_DIR
+    / "outputs"
+    / "final_baselines"
+    / "tcn"
+)
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+
+# ============================================================
+# RESEARCH CONTRACT
+# ============================================================
+
+TIN = 24
+NUM_FEATURES = 134
+TOUT = 6
+NUM_TARGETS = 2
+
+TARGET_NAMES = [
+    "O3",
+    "NO2",
+]
+
+
+# ============================================================
+# TRAINING CONFIGURATION
+# ============================================================
+
+SEED = 42
+
+CHANNELS = [64, 64, 64]
+KERNEL_SIZE = 3
+DROPOUT = 0.20
+
+BATCH_SIZE = 256
+LEARNING_RATE = 3e-4
+WEIGHT_DECAY = 1e-4
+
+MAX_EPOCHS = 30
+PATIENCE = 5
+
+GRADIENT_CLIP = 1.0
+
+
+# ============================================================
+# DEVICE
+# ============================================================
+
+def get_device() -> torch.device:
+
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    return torch.device("cpu")
+
+
+# ============================================================
+# REPRODUCIBILITY
+# ============================================================
+
+def set_seed(seed: int) -> None:
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+# ============================================================
+# TEMPORAL BLOCK
+# ============================================================
 
 class TemporalBlock(nn.Module):
-    def __init__(self, in_ch, out_ch, kernel_size=3, dilation=1, dropout=0.2):
+    """
+    Residual temporal convolution block.
+
+    Input:
+        (B, C_in, T)
+
+    Output:
+        (B, C_out, T)
+
+    Causal padding is used so that a timestep does not
+    receive information from future timesteps.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        dilation: int,
+        dropout: float,
+    ):
         super().__init__()
-        padding = (kernel_size - 1) * dilation
 
-        self.conv1 = nn.Conv1d(in_ch, out_ch, kernel_size,
-                               padding=padding, dilation=dilation)
-        self.chomp1 = Chomp1d(padding)
-        self.relu1 = nn.ReLU()
-        self.drop1 = nn.Dropout(dropout)
+        padding = (
+            kernel_size - 1
+        ) * dilation
 
-        self.conv2 = nn.Conv1d(out_ch, out_ch, kernel_size,
-                               padding=padding, dilation=dilation)
-        self.chomp2 = Chomp1d(padding)
-        self.relu2 = nn.ReLU()
-        self.drop2 = nn.Dropout(dropout)
-
-        self.downsample = nn.Conv1d(in_ch, out_ch, 1) if in_ch != out_ch else None
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        # x: (B, C, T)
-        out = self.conv1(x)
-        out = self.chomp1(out)
-        out = self.relu1(out)
-        out = self.drop1(out)
-
-        out = self.conv2(out)
-        out = self.chomp2(out)
-        out = self.relu2(out)
-        out = self.drop2(out)
-
-        res = x if self.downsample is None else self.downsample(x)
-        return self.relu(out + res)
-
-
-class TCN(nn.Module):
-    def __init__(self, in_dim, channels=(64, 64, 64), kernel_size=3, dropout=0.2, out_dim=2):
-        super().__init__()
-        layers = []
-        in_ch = in_dim
-        for i, ch in enumerate(channels):
-            dilation = 2 ** i
-            layers.append(TemporalBlock(in_ch, ch, kernel_size=kernel_size, dilation=dilation, dropout=dropout))
-            in_ch = ch
-        self.tcn = nn.Sequential(*layers)
-
-        self.head = nn.Sequential(
-            nn.LayerNorm(channels[-1]),
-            nn.Linear(channels[-1], out_dim),
+        self.conv1 = nn.Conv1d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            padding=padding,
+            dilation=dilation,
         )
 
-    def forward(self, x):
-        # x: (B, T, F) -> Conv1d expects (B, C, T)
-        x = x.transpose(1, 2)  # (B, F, T)
-        h = self.tcn(x)        # (B, C, T)
-        last = h[:, :, -1]     # last timestep: (B, C)
-        return self.head(last) # (B, 2)
+        self.conv2 = nn.Conv1d(
+            out_channels,
+            out_channels,
+            kernel_size,
+            padding=padding,
+            dilation=dilation,
+        )
+
+        self.relu = nn.ReLU()
+
+        self.dropout = nn.Dropout(
+            dropout
+        )
+
+        self.downsample = (
+            nn.Conv1d(
+                in_channels,
+                out_channels,
+                kernel_size=1,
+            )
+            if in_channels != out_channels
+            else None
+        )
+
+    @staticmethod
+    def _chomp(
+        x: torch.Tensor,
+        chomp_size: int,
+    ) -> torch.Tensor:
+
+        if chomp_size == 0:
+            return x
+
+        return x[:, :, :-chomp_size]
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+
+        out = self.conv1(x)
+
+        out = self._chomp(
+            out,
+            self.conv1.padding[0],
+        )
+
+        out = self.relu(out)
+        out = self.dropout(out)
+
+        out = self.conv2(out)
+
+        out = self._chomp(
+            out,
+            self.conv2.padding[0],
+        )
+
+        out = self.relu(out)
+        out = self.dropout(out)
+
+        residual = x
+
+        if self.downsample is not None:
+            residual = self.downsample(
+                residual
+            )
+
+        return self.relu(
+            out + residual
+        )
 
 
-def compute_metrics(trues_real, preds_real, prefix=""):
-    mae = mean_absolute_error(trues_real, preds_real)
-    mse = mean_squared_error(trues_real, preds_real)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(trues_real, preds_real)
+# ============================================================
+# TCN MODEL
+# ============================================================
 
-    print(f"\n✅ {prefix} METRICS (Real Units)")
-    print(f"MAE : {mae:.4f}")
-    print(f"MSE : {mse:.4f}")
-    print(f"RMSE: {rmse:.4f}")
-    print(f"R2  : {r2:.4f}")
-    return mae, rmse, r2
+class TCNForecaster(nn.Module):
+    """
+    Direct multi-horizon TCN forecaster.
+
+    Input:
+        (B, 24, 134)
+
+    Output:
+        (B, 6, 2)
+    """
+
+    def __init__(
+        self,
+        input_size: int = NUM_FEATURES,
+        channels: list[int] = CHANNELS,
+        kernel_size: int = KERNEL_SIZE,
+        output_size: int = NUM_TARGETS,
+        forecast_horizon: int = TOUT,
+        dropout: float = DROPOUT,
+    ):
+        super().__init__()
+
+        layers = []
+
+        in_channels = input_size
+
+        for block_idx, out_channels in enumerate(
+            channels
+        ):
+
+            dilation = 2 ** block_idx
+
+            layers.append(
+                TemporalBlock(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=kernel_size,
+                    dilation=dilation,
+                    dropout=dropout,
+                )
+            )
+
+            in_channels = out_channels
+
+        self.tcn = nn.Sequential(
+            *layers
+        )
+
+        self.head = nn.Sequential(
+            nn.Linear(
+                channels[-1],
+                channels[-1],
+            ),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(
+                channels[-1],
+                forecast_horizon
+                * output_size,
+            ),
+        )
+
+        self.forecast_horizon = (
+            forecast_horizon
+        )
+
+        self.output_size = output_size
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+
+        # (B, T, F) → (B, F, T)
+        x = x.transpose(1, 2)
+
+        features = self.tcn(x)
+
+        # Latest observed timestep.
+        latest = features[:, :, -1]
+
+        prediction = self.head(
+            latest
+        )
+
+        return prediction.reshape(
+            x.shape[0],
+            self.forecast_horizon,
+            self.output_size,
+        )
 
 
-def main():
-    os.makedirs("outputs/baselines", exist_ok=True)
-    os.makedirs("outputs/checkpoints", exist_ok=True)
-    os.makedirs("outputs/plots", exist_ok=True)
+# ============================================================
+# MASKED MSE LOSS
+# ============================================================
 
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print("✅ Using device:", device)
+def masked_mse_loss(
+    prediction: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor,
+) -> torch.Tensor:
 
-    # Load full sequences (same split logic)
-    data = np.load("data/sequences.npz")
-    X_seq = data["X_seq"]
-    y_seq = data["y_seq"]
-    N, T, F = X_seq.shape
+    mask = mask.float()
 
-    test_size = int(N * 0.15)
-    val_size  = int(N * 0.15)
-    train_size = N - val_size - test_size
+    squared_error = (
+        prediction - target
+    ) ** 2
 
-    X_train = X_seq[:train_size]
-    y_train = y_seq[:train_size]
-    X_val = X_seq[train_size:train_size + val_size]
-    y_val = y_seq[train_size:train_size + val_size]
-    X_test = X_seq[train_size + val_size:]
-    y_test = y_seq[train_size + val_size:]
-
-    print("✅ Loaded sequences:")
-    print("Train:", X_train.shape, y_train.shape)
-    print("Val  :", X_val.shape, y_val.shape)
-    print("Test :", X_test.shape, y_test.shape)
-
-    # Dataloaders
-    BATCH = 128
-    train_loader = DataLoader(TensorDataset(torch.tensor(X_train, dtype=torch.float32),
-                                            torch.tensor(y_train, dtype=torch.float32)),
-                              batch_size=BATCH, shuffle=True)
-    val_loader = DataLoader(TensorDataset(torch.tensor(X_val, dtype=torch.float32),
-                                          torch.tensor(y_val, dtype=torch.float32)),
-                            batch_size=BATCH, shuffle=False)
-    test_loader = DataLoader(TensorDataset(torch.tensor(X_test, dtype=torch.float32),
-                                           torch.tensor(y_test, dtype=torch.float32)),
-                             batch_size=BATCH, shuffle=False)
-
-    # Model
-    model = TCN(in_dim=F, channels=(64, 64, 64), kernel_size=3, dropout=0.2, out_dim=2).to(device)
-    criterion = nn.MSELoss()
-    optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
-
-    best_val = float("inf")
-    patience = 5
-    counter = 0
-    ckpt_path = "outputs/checkpoints/best_tcn.pt"
-
-    train_losses, val_losses = [], []
-
-    # Train
-    EPOCHS = 30
-    for epoch in range(1, EPOCHS + 1):
-        model.train()
-        tr_loss = 0.0
-        for xb, yb in train_loader:
-            xb, yb = xb.to(device), yb.to(device)
-            optim.zero_grad()
-            pred = model(xb)
-            loss = criterion(pred, yb)
-            loss.backward()
-            optim.step()
-            tr_loss += loss.item() * xb.size(0)
-        tr_loss /= len(train_loader.dataset)
-
-        model.eval()
-        va_loss = 0.0
-        with torch.no_grad():
-            for xb, yb in val_loader:
-                xb, yb = xb.to(device), yb.to(device)
-                pred = model(xb)
-                loss = criterion(pred, yb)
-                va_loss += loss.item() * xb.size(0)
-        va_loss /= len(val_loader.dataset)
-
-        train_losses.append(tr_loss)
-        val_losses.append(va_loss)
-
-        print(f"Epoch {epoch:02d} | Train Loss: {tr_loss:.4f} | Val Loss: {va_loss:.4f}")
-
-        if va_loss < best_val:
-            best_val = va_loss
-            torch.save(model.state_dict(), ckpt_path)
-            print("✅ Saved best TCN checkpoint")
-            counter = 0
-        else:
-            counter += 1
-            if counter >= patience:
-                print("⏹ Early stopping triggered")
-                break
-
-    # Save loss curve
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(8,5))
-    plt.plot(train_losses, label="Train Loss")
-    plt.plot(val_losses, label="Val Loss")
-    plt.title("TCN Training vs Validation Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("outputs/plots/tcn_loss_curve.png", dpi=300)
-    plt.close()
-    print("✅ Saved: outputs/plots/tcn_loss_curve.png")
-
-    # Predict
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
-    model.eval()
-
-    preds_scaled, trues_scaled = [], []
-    with torch.no_grad():
-        for xb, yb in test_loader:
-            xb = xb.to(device)
-            pred = model(xb).cpu().numpy()
-            preds_scaled.append(pred)
-            trues_scaled.append(yb.numpy())
-
-    preds_scaled = np.vstack(preds_scaled)
-    trues_scaled = np.vstack(trues_scaled)
-
-    # Convert residuals back to real units
-    y_res_scaler = joblib.load("data/y_res_scaler.pkl")
-    preds_residual = y_res_scaler.inverse_transform(preds_scaled)
-    trues_residual = y_res_scaler.inverse_transform(trues_scaled)
-
-    # Forecast extraction (last timestep)
-    _, forecast = load_feature_list_and_forecast_from_X(
-        X_test_seq_original=X_test,
-        feature_list_path="data/feature_list.json",
-        o3_feature_name="O3_forecast",
-        no2_feature_name="NO2_forecast"
+    weighted_error = (
+        squared_error * mask
     )
 
-    preds_real = forecast + preds_residual
-    trues_real = forecast + trues_residual
+    denominator = (
+        mask.sum() + 1e-8
+    )
 
-    # Metrics
-    mae, rmse, r2 = compute_metrics(trues_real, preds_real, prefix="TCN")
+    return (
+        weighted_error.sum()
+        / denominator
+    )
 
-    for i, name in enumerate(["O3_target", "NO2_target"]):
-        compute_metrics(trues_real[:, i], preds_real[:, i], prefix=f"TCN {name}")
 
-    # Save
-    np.save("outputs/baselines/tcn_preds_real.npy", preds_real)
-    np.save("outputs/baselines/tcn_true_real.npy", trues_real)
+# ============================================================
+# VALIDATION LOSS
+# ============================================================
 
-    with open("outputs/baselines/tcn_paper_row.csv", "w") as f:
-        f.write("Method,MAE,RMSE,R2\n")
-        f.write(f"TCN (Residual + Forecast),{mae:.6f},{rmse:.6f},{r2:.6f}\n")
+def evaluate_loss(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> float:
 
-    print("\n✅ Saved TCN outputs to outputs/baselines/")
+    model.eval()
+
+    total_loss = 0.0
+    total_weight = 0.0
+
+    with torch.no_grad():
+
+        for xb, yb, mb in loader:
+
+            xb = xb.to(device)
+            yb = yb.to(device)
+            mb = mb.to(device)
+
+            prediction = model(xb)
+
+            mask = mb.float()
+
+            squared_error = (
+                prediction - yb
+            ) ** 2
+
+            total_loss += float(
+                (
+                    squared_error * mask
+                ).sum().item()
+            )
+
+            total_weight += float(
+                mask.sum().item()
+            )
+
+    if total_weight == 0:
+        return float("nan")
+
+    return (
+        total_loss
+        / total_weight
+    )
+
+
+# ============================================================
+# METRICS
+# ============================================================
+
+def masked_mae(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    mask: np.ndarray,
+) -> float:
+
+    valid = mask.astype(bool)
+
+    if not np.any(valid):
+        return float("nan")
+
+    return float(
+        np.mean(
+            np.abs(
+                y_pred[valid]
+                - y_true[valid]
+            )
+        )
+    )
+
+
+def masked_rmse(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    mask: np.ndarray,
+) -> float:
+
+    valid = mask.astype(bool)
+
+    if not np.any(valid):
+        return float("nan")
+
+    return float(
+        np.sqrt(
+            np.mean(
+                (
+                    y_pred[valid]
+                    - y_true[valid]
+                ) ** 2
+            )
+        )
+    )
+
+
+def masked_r2(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    mask: np.ndarray,
+) -> float:
+
+    valid = mask.astype(bool)
+
+    if not np.any(valid):
+        return float("nan")
+
+    true_values = y_true[valid]
+    pred_values = y_pred[valid]
+
+    mean_true = np.mean(
+        true_values
+    )
+
+    sse = np.sum(
+        (
+            true_values
+            - pred_values
+        ) ** 2
+    )
+
+    sst = np.sum(
+        (
+            true_values
+            - mean_true
+        ) ** 2
+    )
+
+    if sst <= 0:
+        return float("nan")
+
+    return float(
+        1.0 - sse / sst
+    )
+
+
+def calculate_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    mask: np.ndarray,
+) -> Dict:
+
+    results: Dict = {}
+
+    # --------------------------------------------------------
+    # Overall
+    # --------------------------------------------------------
+
+    results["overall"] = {
+        "MAE": masked_mae(
+            y_true,
+            y_pred,
+            mask,
+        ),
+        "RMSE": masked_rmse(
+            y_true,
+            y_pred,
+            mask,
+        ),
+        "R2": masked_r2(
+            y_true,
+            y_pred,
+            mask,
+        ),
+    }
+
+    # --------------------------------------------------------
+    # Target-wise
+    # --------------------------------------------------------
+
+    results["targets"] = {}
+
+    for target_idx, target_name in enumerate(
+        TARGET_NAMES
+    ):
+
+        true_target = y_true[
+            :,
+            :,
+            target_idx,
+        ]
+
+        pred_target = y_pred[
+            :,
+            :,
+            target_idx,
+        ]
+
+        mask_target = mask[
+            :,
+            :,
+            target_idx,
+        ]
+
+        results["targets"][
+            target_name
+        ] = {
+            "MAE": masked_mae(
+                true_target,
+                pred_target,
+                mask_target,
+            ),
+            "RMSE": masked_rmse(
+                true_target,
+                pred_target,
+                mask_target,
+            ),
+            "R2": masked_r2(
+                true_target,
+                pred_target,
+                mask_target,
+            ),
+        }
+
+    # --------------------------------------------------------
+    # Horizon-wise
+    # --------------------------------------------------------
+
+    results["horizons"] = {}
+
+    for h in range(
+        y_true.shape[1]
+    ):
+
+        true_h = y_true[:, h, :]
+        pred_h = y_pred[:, h, :]
+        mask_h = mask[:, h, :]
+
+        results["horizons"][
+            f"H+{h + 1}"
+        ] = {
+            "MAE": masked_mae(
+                true_h,
+                pred_h,
+                mask_h,
+            ),
+            "RMSE": masked_rmse(
+                true_h,
+                pred_h,
+                mask_h,
+            ),
+            "R2": masked_r2(
+                true_h,
+                pred_h,
+                mask_h,
+            ),
+        }
+
+    return results
+
+
+# ============================================================
+# PREDICTION
+# ============================================================
+
+def predict(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> np.ndarray:
+
+    model.eval()
+
+    predictions = []
+
+    with torch.no_grad():
+
+        for xb, _, _ in loader:
+
+            xb = xb.to(device)
+
+            prediction = (
+                model(xb)
+                .cpu()
+                .numpy()
+            )
+
+            predictions.append(
+                prediction
+            )
+
+    return np.concatenate(
+        predictions,
+        axis=0,
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main() -> None:
+
+    set_seed(SEED)
+
+    print()
+    print("=" * 70)
+    print("STRATOWATCH — FINAL SINGLE-SITE TCN")
+    print("=" * 70)
+
+    total_start = time.time()
+
+    device = get_device()
+
+    print()
+    print(f"Device: {device}")
+    print(f"Seed: {SEED}")
+
+    # ========================================================
+    # LOAD DATA
+    # ========================================================
+
+    print()
+    print(
+        "[1/7] Loading official Phase 7 dataset..."
+    )
+
+    splits = load_splits()
+
+    X_train = splits["X_train"]
+    Y_train = splits["Y_train"]
+
+    X_val = splits["X_val"]
+    Y_val = splits["Y_val"]
+
+    X_test = splits["X_test"]
+    Y_test = splits["Y_test"]
+
+    Y_mask_train = splits[
+        "Y_mask_train"
+    ]
+
+    Y_mask_val = splits[
+        "Y_mask_val"
+    ]
+
+    Y_mask_test = splits[
+        "Y_mask_test"
+    ]
+
+    target_scaler = splits[
+        "target_scaler"
+    ]
+
+    # ========================================================
+    # CONTRACT CHECKS
+    # ========================================================
+
+    if X_train.shape[1:] != (
+        TIN,
+        NUM_FEATURES,
+    ):
+        raise ValueError(
+            f"Unexpected X_train shape: "
+            f"{X_train.shape}"
+        )
+
+    if Y_train.shape[1:] != (
+        TOUT,
+        NUM_TARGETS,
+    ):
+        raise ValueError(
+            f"Unexpected Y_train shape: "
+            f"{Y_train.shape}"
+        )
+
+    print()
+    print("Dataset:")
+    print(
+        f"  X_train: {X_train.shape}"
+    )
+    print(
+        f"  Y_train: {Y_train.shape}"
+    )
+    print(
+        f"  X_val  : {X_val.shape}"
+    )
+    print(
+        f"  Y_val  : {Y_val.shape}"
+    )
+    print(
+        f"  X_test : {X_test.shape}"
+    )
+    print(
+        f"  Y_test : {Y_test.shape}"
+    )
+
+    # ========================================================
+    # TENSOR DATASETS
+    # ========================================================
+
+    print()
+    print(
+        "[2/7] Creating PyTorch datasets..."
+    )
+
+    train_dataset = TensorDataset(
+        torch.from_numpy(
+            X_train.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_train.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_mask_train.astype(np.float32)
+        ),
+    )
+
+    val_dataset = TensorDataset(
+        torch.from_numpy(
+            X_val.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_val.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_mask_val.astype(np.float32)
+        ),
+    )
+
+    test_dataset = TensorDataset(
+        torch.from_numpy(
+            X_test.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_test.astype(np.float32)
+        ),
+        torch.from_numpy(
+            Y_mask_test.astype(np.float32)
+        ),
+    )
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=0,
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
+    )
+
+    # ========================================================
+    # BUILD MODEL
+    # ========================================================
+
+    print()
+    print("[3/7] Building TCN...")
+
+    model = TCNForecaster(
+        input_size=NUM_FEATURES,
+        channels=CHANNELS,
+        kernel_size=KERNEL_SIZE,
+        output_size=NUM_TARGETS,
+        forecast_horizon=TOUT,
+        dropout=DROPOUT,
+    ).to(device)
+
+    parameter_count = sum(
+        p.numel()
+        for p in model.parameters()
+        if p.requires_grad
+    )
+
+    print()
+    print("TCN configuration:")
+    print(
+        f"  Input features : {NUM_FEATURES}"
+    )
+    print(
+        f"  Input hours    : {TIN}"
+    )
+    print(
+        f"  Channels       : {CHANNELS}"
+    )
+    print(
+        f"  Kernel size    : {KERNEL_SIZE}"
+    )
+    print(
+        f"  Dropout        : {DROPOUT}"
+    )
+    print(
+        f"  Output horizon : {TOUT}"
+    )
+    print(
+        f"  Targets        : {NUM_TARGETS}"
+    )
+    print(
+        f"  Parameters     : {parameter_count:,}"
+    )
+
+    # ========================================================
+    # OPTIMIZER
+    # ========================================================
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+    )
+
+    # ========================================================
+    # TRAINING
+    # ========================================================
+
+    print()
+    print("[4/7] Training TCN...")
+    print()
+
+    best_val_loss = float("inf")
+    best_epoch = 0
+    patience_counter = 0
+
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+    }
+
+    best_model_path = (
+        OUTPUT_DIR
+        / "tcn_best.pt"
+    )
+
+    train_start = time.time()
+
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1,
+    ):
+
+        model.train()
+
+        total_loss = 0.0
+        total_weight = 0.0
+
+        for xb, yb, mb in train_loader:
+
+            xb = xb.to(device)
+            yb = yb.to(device)
+            mb = mb.to(device)
+
+            optimizer.zero_grad(
+                set_to_none=True
+            )
+
+            prediction = model(xb)
+
+            loss = masked_mse_loss(
+                prediction,
+                yb,
+                mb,
+            )
+
+            if not torch.isfinite(loss):
+                raise RuntimeError(
+                    f"Non-finite training loss "
+                    f"at epoch {epoch}: "
+                    f"{loss.item()}"
+                )
+
+            loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                GRADIENT_CLIP,
+            )
+
+            optimizer.step()
+
+            weight = float(
+                mb.sum().item()
+            )
+
+            total_loss += (
+                float(loss.item())
+                * weight
+            )
+
+            total_weight += weight
+
+        train_loss = (
+            total_loss
+            / max(total_weight, 1.0)
+        )
+
+        val_loss = evaluate_loss(
+            model,
+            val_loader,
+            device,
+        )
+
+        history["train_loss"].append(
+            train_loss
+        )
+
+        history["val_loss"].append(
+            val_loss
+        )
+
+        print(
+            f"Epoch {epoch:02d}/{MAX_EPOCHS} "
+            f"| train_MSE={train_loss:.6f} "
+            f"| val_MSE={val_loss:.6f}"
+        )
+
+        if val_loss < best_val_loss:
+
+            best_val_loss = val_loss
+            best_epoch = epoch
+            patience_counter = 0
+
+            torch.save(
+                {
+                    "model_state_dict":
+                        model.state_dict(),
+                    "model_config": {
+                        "input_size":
+                            NUM_FEATURES,
+                        "channels":
+                            CHANNELS,
+                        "kernel_size":
+                            KERNEL_SIZE,
+                        "output_size":
+                            NUM_TARGETS,
+                        "forecast_horizon":
+                            TOUT,
+                        "dropout":
+                            DROPOUT,
+                    },
+                    "research_contract": {
+                        "features":
+                            NUM_FEATURES,
+                        "tin":
+                            TIN,
+                        "tout":
+                            TOUT,
+                        "targets":
+                            TARGET_NAMES,
+                    },
+                    "seed": SEED,
+                    "epoch": epoch,
+                    "val_loss": val_loss,
+                },
+                best_model_path,
+            )
+
+            print(
+                "  ✓ best checkpoint saved"
+            )
+
+        else:
+
+            patience_counter += 1
+
+            if patience_counter >= PATIENCE:
+
+                print(
+                    f"Early stopping after "
+                    f"{epoch} epochs"
+                )
+
+                break
+
+    train_seconds = (
+        time.time() - train_start
+    )
+
+    # ========================================================
+    # LOAD BEST CHECKPOINT
+    # ========================================================
+
+    print()
+    print(
+        "[5/7] Loading best checkpoint..."
+    )
+
+    checkpoint = torch.load(
+        best_model_path,
+        map_location=device,
+    )
+
+    model.load_state_dict(
+        checkpoint[
+            "model_state_dict"
+        ]
+    )
+
+    model.eval()
+
+    print(
+        f"  Best epoch: {best_epoch}"
+    )
+
+    print(
+        f"  Best validation MSE: "
+        f"{best_val_loss:.6f}"
+    )
+
+    # ========================================================
+    # PREDICTIONS
+    # ========================================================
+
+    print()
+    print(
+        "[6/7] Generating predictions..."
+    )
+
+    val_pred_scaled = predict(
+        model,
+        val_loader,
+        device,
+    )
+
+    test_pred_scaled = predict(
+        model,
+        test_loader,
+        device,
+    )
+
+    print(
+        f"  Validation predictions: "
+        f"{val_pred_scaled.shape}"
+    )
+
+    print(
+        f"  Test predictions: "
+        f"{test_pred_scaled.shape}"
+    )
+
+    # ========================================================
+    # INVERSE TRANSFORM
+    # ========================================================
+
+    print()
+    print(
+        "Converting predictions "
+        "to real units..."
+    )
+
+    Y_val_real = (
+        inverse_transform_targets(
+            Y_val,
+            target_scaler,
+        )
+    )
+
+    Y_test_real = (
+        inverse_transform_targets(
+            Y_test,
+            target_scaler,
+        )
+    )
+
+    val_pred_real = (
+        inverse_transform_targets(
+            val_pred_scaled,
+            target_scaler,
+        )
+    )
+
+    test_pred_real = (
+        inverse_transform_targets(
+            test_pred_scaled,
+            target_scaler,
+        )
+    )
+
+    # ========================================================
+    # METRICS
+    # ========================================================
+
+    print()
+    print(
+        "[7/7] Calculating masked "
+        "real-unit metrics..."
+    )
+
+    val_metrics = calculate_metrics(
+        Y_val_real,
+        val_pred_real,
+        Y_mask_val,
+    )
+
+    test_metrics = calculate_metrics(
+        Y_test_real,
+        test_pred_real,
+        Y_mask_test,
+    )
+
+    # ========================================================
+    # PRINT FINAL RESULTS
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("TCN — FINAL TEST RESULTS")
+    print("=" * 70)
+
+    print()
+    print("OVERALL")
+
+    print(
+        f"MAE : "
+        f"{test_metrics['overall']['MAE']:.4f}"
+    )
+
+    print(
+        f"RMSE: "
+        f"{test_metrics['overall']['RMSE']:.4f}"
+    )
+
+    print(
+        f"R²  : "
+        f"{test_metrics['overall']['R2']:.4f}"
+    )
+
+    print()
+    print("O3")
+
+    print(
+        f"MAE : "
+        f"{test_metrics['targets']['O3']['MAE']:.4f}"
+    )
+
+    print(
+        f"RMSE: "
+        f"{test_metrics['targets']['O3']['RMSE']:.4f}"
+    )
+
+    print(
+        f"R²  : "
+        f"{test_metrics['targets']['O3']['R2']:.4f}"
+    )
+
+    print()
+    print("NO2")
+
+    print(
+        f"MAE : "
+        f"{test_metrics['targets']['NO2']['MAE']:.4f}"
+    )
+
+    print(
+        f"RMSE: "
+        f"{test_metrics['targets']['NO2']['RMSE']:.4f}"
+    )
+
+    print(
+        f"R²  : "
+        f"{test_metrics['targets']['NO2']['R2']:.4f}"
+    )
+
+    print()
+    print("HORIZON-WISE")
+
+    for horizon, metrics in test_metrics[
+        "horizons"
+    ].items():
+
+        print(
+            f"{horizon} | "
+            f"MAE={metrics['MAE']:.4f} | "
+            f"RMSE={metrics['RMSE']:.4f} | "
+            f"R²={metrics['R2']:.4f}"
+        )
+
+    # ========================================================
+    # SAVE PREDICTIONS
+    # ========================================================
+
+    np.save(
+        OUTPUT_DIR
+        / "test_predictions.npy",
+        test_pred_real,
+    )
+
+    np.save(
+        OUTPUT_DIR
+        / "test_truth.npy",
+        Y_test_real,
+    )
+
+    np.save(
+        OUTPUT_DIR
+        / "test_mask.npy",
+        Y_mask_test,
+    )
+
+    np.save(
+        OUTPUT_DIR
+        / "val_predictions.npy",
+        val_pred_real,
+    )
+
+    np.save(
+        OUTPUT_DIR
+        / "val_truth.npy",
+        Y_val_real,
+    )
+
+    np.save(
+        OUTPUT_DIR
+        / "val_mask.npy",
+        Y_mask_val,
+    )
+
+    # ========================================================
+    # SAVE TRAINING HISTORY
+    # ========================================================
+
+    with open(
+        OUTPUT_DIR
+        / "training_history.json",
+        "w",
+        encoding="utf-8",
+    ) as f:
+
+        json.dump(
+            history,
+            f,
+            indent=2,
+        )
+
+    # ========================================================
+    # SAVE METRICS
+    # ========================================================
+
+    metrics_output = {
+        "model": "tcn",
+        "model_type":
+            "TCNForecaster",
+        "target_mode":
+            "direct_target_prediction",
+        "dataset": {
+            "artifact":
+                splits["data_path"],
+            "features":
+                NUM_FEATURES,
+            "tin":
+                TIN,
+            "tout":
+                TOUT,
+            "targets":
+                TARGET_NAMES,
+            "train_samples":
+                int(X_train.shape[0]),
+            "val_samples":
+                int(X_val.shape[0]),
+            "test_samples":
+                int(X_test.shape[0]),
+        },
+        "configuration": {
+            "channels":
+                CHANNELS,
+            "kernel_size":
+                KERNEL_SIZE,
+            "dropout":
+                DROPOUT,
+            "batch_size":
+                BATCH_SIZE,
+            "learning_rate":
+                LEARNING_RATE,
+            "weight_decay":
+                WEIGHT_DECAY,
+            "max_epochs":
+                MAX_EPOCHS,
+            "patience":
+                PATIENCE,
+            "gradient_clip":
+                GRADIENT_CLIP,
+            "seed":
+                SEED,
+        },
+        "best_epoch":
+            best_epoch,
+        "best_validation_mse":
+            best_val_loss,
+        "validation":
+            val_metrics,
+        "test":
+            test_metrics,
+        "training_seconds":
+            train_seconds,
+        "total_runtime_seconds":
+            time.time() - total_start,
+    }
+
+    metrics_path = (
+        OUTPUT_DIR
+        / "test_metrics.json"
+    )
+
+    with open(
+        metrics_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+
+        json.dump(
+            metrics_output,
+            f,
+            indent=2,
+        )
+
+    # ========================================================
+    # SAVE METADATA
+    # ========================================================
+
+    metadata = {
+        "model":
+            "tcn",
+        "model_type":
+            "TCNForecaster",
+        "direct_target_prediction":
+            True,
+        "residual_learning":
+            False,
+        "dataset_artifact":
+            splits["data_path"],
+        "feature_schema":
+            splits["feature_list_path"],
+        "target_scaler":
+            splits["target_scaler_path"],
+        "contract": {
+            "feature_count":
+                NUM_FEATURES,
+            "input_hours":
+                TIN,
+            "forecast_hours":
+                TOUT,
+            "target_count":
+                NUM_TARGETS,
+            "targets":
+                TARGET_NAMES,
+        },
+    }
+
+    with open(
+        OUTPUT_DIR
+        / "metadata.json",
+        "w",
+        encoding="utf-8",
+    ) as f:
+
+        json.dump(
+            metadata,
+            f,
+            indent=2,
+        )
+
+    # ========================================================
+    # FINAL SUMMARY
+    # ========================================================
+
+    print()
+    print("=" * 70)
+    print("TCN COMPLETE")
+    print("=" * 70)
+
+    print()
+    print("Saved:")
+    print(
+        f"  Checkpoint : "
+        f"{best_model_path}"
+    )
+
+    print(
+        f"  Metrics    : "
+        f"{metrics_path}"
+    )
+
+    print(
+        f"  Predictions: "
+        f"{OUTPUT_DIR / 'test_predictions.npy'}"
+    )
+
+    print(
+        f"  History    : "
+        f"{OUTPUT_DIR / 'training_history.json'}"
+    )
+
+    print(
+        f"  Metadata   : "
+        f"{OUTPUT_DIR / 'metadata.json'}"
+    )
+
+    print()
+    print(
+        f"Total runtime: "
+        f"{time.time() - total_start:.2f} seconds"
+    )
+
+    print()
+    print(
+        "RESEARCH CONTRACT: PASSED"
+    )
+    print("TCN: COMPLETE")
+    print("=" * 70)
+    print()
 
 
 if __name__ == "__main__":

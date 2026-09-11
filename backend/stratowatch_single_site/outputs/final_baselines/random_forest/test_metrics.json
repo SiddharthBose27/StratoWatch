@@ -1,0 +1,72 @@
+{
+  "model": "random_forest",
+  "evaluation_type": "final_test_real_units",
+  "overall": {
+    "MAE": 0.4391971419491546,
+    "RMSE": 0.6526050435223311,
+    "R2": 0.24892577149929396
+  },
+  "per_target": {
+    "O3": {
+      "MAE": 0.30572831897916086,
+      "RMSE": 0.48162676635301926,
+      "R2": 0.04215120137586137
+    },
+    "NO2": {
+      "MAE": 0.5726659649191483,
+      "RMSE": 0.7872879673879828,
+      "R2": 0.15143477883780776
+    }
+  },
+  "horizon_wise": {
+    "horizon_1": {
+      "MAE": 0.3947387001861004,
+      "RMSE": 0.6004607661192041,
+      "R2": 0.3637373615325886
+    },
+    "horizon_2": {
+      "MAE": 0.4190026801771614,
+      "RMSE": 0.6277127504866286,
+      "R2": 0.30485529234074205
+    },
+    "horizon_3": {
+      "MAE": 0.43771425653054996,
+      "RMSE": 0.6495431789377578,
+      "R2": 0.25585832001817455
+    },
+    "horizon_4": {
+      "MAE": 0.4518034699793274,
+      "RMSE": 0.6662785714516394,
+      "R2": 0.21722322319786302
+    },
+    "horizon_5": {
+      "MAE": 0.4621141909901878,
+      "RMSE": 0.6791848961111417,
+      "R2": 0.18681696900215305
+    },
+    "horizon_6": {
+      "MAE": 0.46980955383160067,
+      "RMSE": 0.6882281809306012,
+      "R2": 0.1652450934602323
+    }
+  },
+  "metadata": {
+    "model_type": "RandomForestRegressor",
+    "target_mode": "direct_target_prediction",
+    "residual_learning": false,
+    "dataset": "official_phase7_test",
+    "input_window_hours": 24,
+    "forecast_horizon_hours": 6,
+    "feature_count": 134,
+    "flattened_input_features": 3216,
+    "target_count": 2,
+    "targets": [
+      "O3",
+      "NO2"
+    ],
+    "test_samples": 6464,
+    "model_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_baselines/random_forest/random_forest_final.joblib",
+    "prediction_seconds": 0.08829903602600098,
+    "evaluation_seconds": 2.563169002532959
+  }
+}

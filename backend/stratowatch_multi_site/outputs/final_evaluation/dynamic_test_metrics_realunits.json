@@ -1,0 +1,64 @@
+{
+  "model": "DynamicWindGraphSTTransformer",
+  "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/outputs/checkpoints/dynamic_wind_graph_st_best.pt",
+  "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/data/processed/splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+  "seed": 42,
+  "device": "mps",
+  "num_features": 28,
+  "num_sites": 7,
+  "tin": 24,
+  "tout": 6,
+  "overall": {
+    "mae": 19.046449661254883,
+    "rmse": 26.94546127319336,
+    "r2": 0.39105987548828125
+  },
+  "O3": {
+    "mae": 18.78582000732422,
+    "rmse": 27.483654022216797,
+    "r2": 0.4768875241279602
+  },
+  "NO2": {
+    "mae": 19.307077407836914,
+    "rmse": 26.396299362182617,
+    "r2": 0.2226136326789856
+  },
+  "horizon_wise": [
+    {
+      "horizon": 1,
+      "mae": 18.856054306030273,
+      "rmse": 26.79625129699707,
+      "r2": 0.397466778755188
+    },
+    {
+      "horizon": 2,
+      "mae": 18.95904541015625,
+      "rmse": 26.858863830566406,
+      "r2": 0.3947139382362366
+    },
+    {
+      "horizon": 3,
+      "mae": 18.9965763092041,
+      "rmse": 26.70566177368164,
+      "r2": 0.4018436670303345
+    },
+    {
+      "horizon": 4,
+      "mae": 19.089284896850586,
+      "rmse": 26.995502471923828,
+      "r2": 0.38889509439468384
+    },
+    {
+      "horizon": 5,
+      "mae": 19.14137840270996,
+      "rmse": 27.012739181518555,
+      "r2": 0.38824373483657837
+    },
+    {
+      "horizon": 6,
+      "mae": 19.236473083496094,
+      "rmse": 27.299802780151367,
+      "r2": 0.3752032518386841
+    }
+  ]
+}

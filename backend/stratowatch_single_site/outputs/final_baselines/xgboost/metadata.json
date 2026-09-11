@@ -1,0 +1,20 @@
+{
+  "model": "xgboost",
+  "model_type": "XGBRegressor",
+  "number_of_regressors": 12,
+  "direct_target_prediction": true,
+  "residual_learning": false,
+  "dataset_artifact": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_scaled.npz",
+  "feature_schema": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/data/feature_list.json",
+  "target_scaler": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_target_scaler.pkl",
+  "contract": {
+    "feature_count": 134,
+    "input_hours": 24,
+    "forecast_hours": 6,
+    "target_count": 2,
+    "targets": [
+      "O3",
+      "NO2"
+    ]
+  }
+}

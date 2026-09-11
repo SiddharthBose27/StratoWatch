@@ -1,0 +1,221 @@
+{
+  "project": "StratoWatch 2.0",
+  "evaluation_type": "final_multi_site_test_real_units",
+  "dataset_contract": {
+    "num_features": 28,
+    "num_sites": 7,
+    "tin": 24,
+    "tout": 6,
+    "num_targets": 2,
+    "targets": [
+      "O3",
+      "NO2"
+    ],
+    "evaluation_units": "real_units",
+    "masking": "global_mask_weighted",
+    "seed": 42
+  },
+  "models": {
+    "st_transformer": {
+      "model": "st_transformer",
+      "model_class": "STTransformer",
+      "seed": 42,
+      "num_features": 28,
+      "num_sites": 7,
+      "tin": 24,
+      "tout": 6,
+      "overall": {
+        "MAE": 18.8349,
+        "RMSE": 27.9747,
+        "R2": 0.3437
+      },
+      "targets": {
+        "O3": {
+          "MAE": 19.0729,
+          "RMSE": 29.2425,
+          "R2": 0.4078
+        },
+        "NO2": {
+          "MAE": 18.5969,
+          "RMSE": 26.6466,
+          "R2": 0.2078
+        }
+      },
+      "horizon_wise": null,
+      "source": "src.eval_baseline_realunits",
+      "status": "frozen_verified"
+    },
+    "static_graph_st": {
+      "model": "static_graph_st",
+      "model_class": "StaticGraphSTTransformer",
+      "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/outputs/checkpoints/static_graph_st_best.pt",
+      "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/data/processed/splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+      "seed": 42,
+      "device": "mps",
+      "num_features": 28,
+      "num_sites": 7,
+      "tin": 24,
+      "tout": 6,
+      "overall": {
+        "MAE": 19.038433074951172,
+        "RMSE": 27.078136444091797,
+        "R2": 0.38504844903945923
+      },
+      "targets": {
+        "O3": {
+          "MAE": 18.693880081176758,
+          "RMSE": 27.554443359375,
+          "R2": 0.47418928146362305
+        },
+        "NO2": {
+          "MAE": 19.38298225402832,
+          "RMSE": 26.593299865722656,
+          "R2": 0.21096670627593994
+        }
+      },
+      "horizon_wise": [
+        {
+          "horizon": 1,
+          "MAE": 18.934741973876953,
+          "RMSE": 27.033979415893555,
+          "R2": 0.3867284059524536
+        },
+        {
+          "horizon": 2,
+          "MAE": 18.94780921936035,
+          "RMSE": 27.055622100830078,
+          "R2": 0.3858131766319275
+        },
+        {
+          "horizon": 3,
+          "MAE": 18.94661521911621,
+          "RMSE": 26.832195281982422,
+          "R2": 0.39616191387176514
+        },
+        {
+          "horizon": 4,
+          "MAE": 19.08332061767578,
+          "RMSE": 27.078140258789062,
+          "R2": 0.38514798879623413
+        },
+        {
+          "horizon": 5,
+          "MAE": 19.127952575683594,
+          "RMSE": 27.100542068481445,
+          "R2": 0.3842604160308838
+        },
+        {
+          "horizon": 6,
+          "MAE": 19.190237045288086,
+          "RMSE": 27.365720748901367,
+          "R2": 0.37218236923217773
+        }
+      ],
+      "source": "static_test_metrics_realunits.json",
+      "status": "frozen_verified"
+    },
+    "dynamic_wind_graph_st": {
+      "model": "dynamic_wind_graph_st",
+      "model_class": "DynamicWindGraphSTTransformer",
+      "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/outputs/checkpoints/dynamic_wind_graph_st_best.pt",
+      "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/data/processed/splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+      "seed": 42,
+      "device": "mps",
+      "num_features": 28,
+      "num_sites": 7,
+      "tin": 24,
+      "tout": 6,
+      "overall": {
+        "MAE": 19.046449661254883,
+        "RMSE": 26.94546127319336,
+        "R2": 0.39105987548828125
+      },
+      "targets": {
+        "O3": {
+          "MAE": 18.78582000732422,
+          "RMSE": 27.483654022216797,
+          "R2": 0.4768875241279602
+        },
+        "NO2": {
+          "MAE": 19.307077407836914,
+          "RMSE": 26.396299362182617,
+          "R2": 0.2226136326789856
+        }
+      },
+      "horizon_wise": [
+        {
+          "horizon": 1,
+          "MAE": 18.856054306030273,
+          "RMSE": 26.79625129699707,
+          "R2": 0.397466778755188
+        },
+        {
+          "horizon": 2,
+          "MAE": 18.95904541015625,
+          "RMSE": 26.858863830566406,
+          "R2": 0.3947139382362366
+        },
+        {
+          "horizon": 3,
+          "MAE": 18.9965763092041,
+          "RMSE": 26.70566177368164,
+          "R2": 0.4018436670303345
+        },
+        {
+          "horizon": 4,
+          "MAE": 19.089284896850586,
+          "RMSE": 26.995502471923828,
+          "R2": 0.38889509439468384
+        },
+        {
+          "horizon": 5,
+          "MAE": 19.14137840270996,
+          "RMSE": 27.012739181518555,
+          "R2": 0.38824373483657837
+        },
+        {
+          "horizon": 6,
+          "MAE": 19.236473083496094,
+          "RMSE": 27.299802780151367,
+          "R2": 0.3752032518386841
+        }
+      ],
+      "source": "dynamic_test_metrics_realunits.json",
+      "status": "frozen_verified"
+    }
+  },
+  "leaderboard": [
+    {
+      "model": "st_transformer",
+      "MAE": 18.8349,
+      "RMSE": 27.9747,
+      "R2": 0.3437
+    },
+    {
+      "model": "static_graph_st",
+      "MAE": 19.038433074951172,
+      "RMSE": 27.078136444091797,
+      "R2": 0.38504844903945923
+    },
+    {
+      "model": "dynamic_wind_graph_st",
+      "MAE": 19.046449661254883,
+      "RMSE": 26.94546127319336,
+      "R2": 0.39105987548828125
+    }
+  ],
+  "research_summary": {
+    "best_mae_model": "st_transformer",
+    "best_mae": 18.8349,
+    "best_rmse_model": "dynamic_wind_graph_st",
+    "best_rmse": 26.94546127319336,
+    "best_r2_model": "dynamic_wind_graph_st",
+    "best_r2": 0.39105987548828125,
+    "interpretation": "The ST Transformer achieves the lowest overall MAE. The Dynamic Wind Graph-ST achieves the lowest overall RMSE and highest overall R\u00b2. The Static Graph-ST remains competitive. These results indicate that spatial modeling is useful for the multi-site forecasting task, while the dynamic wind graph provides a modest improvement in RMSE and explained variance."
+  },
+  "horizon_wise_availability": {
+    "st_transformer": false,
+    "static_graph_st": true,
+    "dynamic_wind_graph_st": true
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "model": "TemporalTransformer",
+  "evaluation_type": "final_test_real_units",
+  "seed": 42,
+  "device": "mps",
+  "num_features": 134,
+  "tin": 24,
+  "tout": 6,
+  "num_targets": 2,
+  "targets": [
+    "O3_target",
+    "NO2_target"
+  ],
+  "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/outputs/final_single_site/best_transformer.pt",
+  "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_scaled.npz",
+  "target_scaler": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_target_scaler.pkl",
+  "overall": {
+    "MAE": 0.570001482963562,
+    "RMSE": 0.7524013223931526,
+    "R2": 0.0016539692878723145
+  },
+  "per_target": {
+    "O3_target": {
+      "MAE": 0.5806534886360168,
+      "RMSE": 0.7391932672217731,
+      "R2": -1.2562735080718994
+    },
+    "NO2_target": {
+      "MAE": 0.5593494772911072,
+      "RMSE": 0.765381482381126,
+      "R2": 0.19800084829330444
+    }
+  },
+  "horizon_wise": {
+    "horizon_1": {
+      "MAE": 0.5333445072174072,
+      "RMSE": 0.7094533750955582,
+      "R2": 0.11179167032241821
+    },
+    "horizon_2": {
+      "MAE": 0.5112956762313843,
+      "RMSE": 0.6880952035895593,
+      "R2": 0.16468477249145508
+    },
+    "horizon_3": {
+      "MAE": 0.5856667160987854,
+      "RMSE": 0.7634186385795888,
+      "R2": -0.027933716773986816
+    },
+    "horizon_4": {
+      "MAE": 0.5610567331314087,
+      "RMSE": 0.7473098271204012,
+      "R2": 0.015246272087097168
+    },
+    "horizon_5": {
+      "MAE": 0.5784648656845093,
+      "RMSE": 0.7642245427023059,
+      "R2": -0.029566168785095215
+    },
+    "horizon_6": {
+      "MAE": 0.650180459022522,
+      "RMSE": 0.8333837056830303,
+      "R2": -0.2240074872970581
+    }
+  }
+}

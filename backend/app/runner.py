@@ -1,164 +1,648 @@
+from __future__ import annotations
+
 import base64
-import os
-import re
-import subprocess
+import json
 import sys
-from glob import glob
-from typing import Dict, List, Tuple
-
-MAX_PLOTS = 6  # start small, increase later
-
-def _collect_pngs() -> List[Dict[str, str]]:
-    paths = []
-    paths += sorted(glob(os.path.join(PLOTS_DIR, "*.png")))
-    paths += sorted(glob(os.path.join(CM_DIR, "*.png")))
-
-    # take latest plots only (most recent files)
-    paths = sorted(paths, key=lambda p: os.path.getmtime(p), reverse=True)[:MAX_PLOTS]
-
-    plots = []
-    for p in paths:
-        plots.append({"name": os.path.basename(p), "b64": _b64(p)})
-    return plots
-
-# Path: backend/stratowatch_single_site
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-PROJECT_DIR = os.path.join(ROOT, "stratowatch_single_site")
-
-# Where your scripts write images (from your README)
-PLOTS_DIR = os.path.join(PROJECT_DIR, "outputs", "plots")
-CM_DIR = os.path.join(PROJECT_DIR, "outputs", "confusion_matrices")
-
-# Your pipeline expects this exact file name (you confirmed overwrite)
-UNSEEN_FILE = os.path.join(PROJECT_DIR, "site_1_unseen_input_data.csv")
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
-MODEL_TO_CMD = {
-    # You can rename keys to match your frontend dropdown values
-    "transformer": ["evaluate.py"],
-    "xgboost_residual": ["-m", "baselines.train_xgb"],
-    "lstm": ["-m", "baselines.train_lstm"],
-    "tcn": ["-m", "baselines.train_tcn"],
-    # optional: "forecast_baseline": ["-m", "baselines.forecast_baseline"],
+# ============================================================
+# PATHS
+# ============================================================
+
+APP_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = APP_DIR.parent
+
+SINGLE_SITE_DIR = (
+    BACKEND_DIR / "stratowatch_single_site"
+)
+
+FINAL_BASELINES_DIR = (
+    SINGLE_SITE_DIR
+    / "outputs"
+    / "final_baselines"
+)
+
+FINAL_TRANSFORMER_DIR = (
+    SINGLE_SITE_DIR
+    / "outputs"
+    / "final_single_site"
+)
+
+# Per-model evaluation plots are written here by
+# generate_single_site_plots.py on first request.
+EVALUATION_PLOTS_DIR = (
+    SINGLE_SITE_DIR
+    / "outputs"
+    / "evaluation_plots"
+)
+
+
+# ============================================================
+# FINAL MODEL CONTRACT
+# ============================================================
+
+SINGLE_SITE_MODELS: Dict[str, Dict[str, Any]] = {
+    "xgboost": {
+        "label": "XGBoost",
+        "metrics_path": (
+            FINAL_BASELINES_DIR
+            / "xgboost"
+            / "test_metrics.json"
+        ),
+        "prediction_path": (
+            FINAL_BASELINES_DIR
+            / "xgboost"
+            / "test_predictions.npy"
+        ),
+        "truth_path": (
+            FINAL_BASELINES_DIR
+            / "xgboost"
+            / "test_truth.npy"
+        ),
+        "mask_path": (
+            FINAL_BASELINES_DIR
+            / "xgboost"
+            / "test_mask.npy"
+        ),
+        "model_type": "XGBRegressor",
+        "target_mode": "direct_target_prediction",
+        "residual_learning": False,
+    },
+    "random_forest": {
+        "label": "Random Forest",
+        "metrics_path": (
+            FINAL_BASELINES_DIR
+            / "random_forest"
+            / "test_metrics.json"
+        ),
+        "prediction_path": (
+            FINAL_BASELINES_DIR
+            / "random_forest"
+            / "test_predictions.npy"
+        ),
+        "truth_path": (
+            FINAL_BASELINES_DIR
+            / "random_forest"
+            / "test_truth.npy"
+        ),
+        "mask_path": (
+            FINAL_BASELINES_DIR
+            / "random_forest"
+            / "test_mask.npy"
+        ),
+        "model_type": "RandomForestRegressor",
+        "target_mode": "direct_target_prediction",
+        "residual_learning": False,
+    },
+    "tcn": {
+        "label": "TCN",
+        "metrics_path": (
+            FINAL_BASELINES_DIR
+            / "tcn"
+            / "test_metrics.json"
+        ),
+        "prediction_path": (
+            FINAL_BASELINES_DIR
+            / "tcn"
+            / "test_predictions.npy"
+        ),
+        "truth_path": (
+            FINAL_BASELINES_DIR
+            / "tcn"
+            / "test_truth.npy"
+        ),
+        "mask_path": (
+            FINAL_BASELINES_DIR
+            / "tcn"
+            / "test_mask.npy"
+        ),
+        "model_type": "TCNForecaster",
+        "target_mode": "direct_target_prediction",
+        "residual_learning": False,
+    },
+    "lstm": {
+        "label": "LSTM",
+        "metrics_path": (
+            FINAL_BASELINES_DIR
+            / "lstm"
+            / "test_metrics.json"
+        ),
+        "prediction_path": (
+            FINAL_BASELINES_DIR
+            / "lstm"
+            / "test_predictions.npy"
+        ),
+        "truth_path": (
+            FINAL_BASELINES_DIR
+            / "lstm"
+            / "test_truth.npy"
+        ),
+        "mask_path": (
+            FINAL_BASELINES_DIR
+            / "lstm"
+            / "test_mask.npy"
+        ),
+        "model_type": "LSTMForecaster",
+        "target_mode": "direct_target_prediction",
+        "residual_learning": False,
+    },
+    "transformer": {
+        "label": "Transformer",
+        "metrics_path": (
+            FINAL_TRANSFORMER_DIR
+            / "final_evaluation_metrics.json"
+        ),
+        "prediction_path": (
+            FINAL_TRANSFORMER_DIR
+            / "test_predictions_real_units.npy"
+        ),
+        "truth_path": (
+            FINAL_TRANSFORMER_DIR
+            / "test_truth_real_units.npy"
+        ),
+        "mask_path": (
+            FINAL_TRANSFORMER_DIR
+            / "test_mask.npy"
+        ),
+        "model_type": "TemporalTransformer",
+        "target_mode": "direct_target_prediction",
+        "residual_learning": False,
+    },
 }
 
 
-def _b64(path: str) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _load_json(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Evaluation metrics not found:\n{path}"
+        )
+
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        payload = json.load(file)
+
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"Expected JSON object in {path}"
+        )
+
+    return payload
 
 
-def _run_py(args: List[str]) -> Tuple[int, str, str]:
+def _first_number(
+    mapping: Any,
+    *keys: str,
+) -> Optional[float]:
+    if not isinstance(mapping, dict):
+        return None
+
+    for key in keys:
+        value = mapping.get(key)
+
+        if value is None:
+            continue
+
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+
+        if number == number:
+            return number
+
+    return None
+
+
+def _metric_block(
+    block: Any,
+) -> Dict[str, Optional[float]]:
     """
-    Runs python inside PROJECT_DIR so relative paths work.
-    Uses current venv python.
+    Normalize:
+        MAE / mae
+        RMSE / rmse
+        R2 / r2
+        R²
+
+    into:
+        mae / rmse / r2
     """
-    cmd = [sys.executable] + args
-    env = os.environ.copy()
 
-    # Ensure PROJECT_DIR is importable for "-m baselines.*"
-    env["PYTHONPATH"] = PROJECT_DIR + os.pathsep + env.get("PYTHONPATH", "")
+    return {
+        "mae": _first_number(
+            block,
+            "MAE",
+            "mae",
+        ),
+        "rmse": _first_number(
+            block,
+            "RMSE",
+            "rmse",
+        ),
+        "r2": _first_number(
+            block,
+            "R2",
+            "r2",
+            "R²",
+        ),
+    }
 
-    p = subprocess.run(
-        cmd,
-        cwd=PROJECT_DIR,
-        env=env,
-        capture_output=True,
-        text=True,
+
+def _normalize_metrics(
+    model_name: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Convert all five model evaluation JSON formats into
+    one frontend-facing contract.
+    """
+
+    # --------------------------------------------------------
+    # Overall
+    # --------------------------------------------------------
+
+    overall_source = payload.get("overall")
+
+    # XGBoost / RF / TCN / LSTM:
+    # overall is normally directly available.
+    #
+    # Some artifacts may wrap metrics under "test".
+    if not isinstance(overall_source, dict):
+        test_block = payload.get("test")
+
+        if isinstance(test_block, dict):
+            overall_source = test_block.get(
+                "overall",
+                test_block,
+            )
+
+    overall = _metric_block(
+        overall_source
     )
-    return p.returncode, p.stdout, p.stderr
 
+    # --------------------------------------------------------
+    # Per-target
+    # --------------------------------------------------------
 
-def _extract_metrics(text: str) -> Dict[str, float]:
-    """
-    Tries to parse printed metrics from stdout.
-    Works with patterns like:
-      MAE : 17.95
-      RMSE: 26.69
-      R2  : 0.4208
-    """
-    metrics = {}
+    target_source = (
+        payload.get("per_target")
+    )
 
-    def find_one(key: str) -> float | None:
-        # match "KEY : value" or "KEY: value"
-        m = re.search(rf"{key}\s*[:=]\s*([-+]?\d*\.?\d+)", text, re.IGNORECASE)
-        if not m:
-            return None
-        return float(m.group(1))
+    if not isinstance(target_source, dict):
+        target_source = payload.get(
+            "targets",
+            {},
+        )
 
-    for k in ["MAE", "MSE", "RMSE", "R2", "R²"]:
-        v = find_one(k)
-        if v is not None:
-            if k == "R²":
-                metrics["R2"] = v
-            else:
-                metrics[k] = v
+    per_target: Dict[str, Any] = {}
 
-    # Normalize
-    if "R²" in metrics:
-        metrics["R2"] = metrics.pop("R²")
+    if isinstance(target_source, dict):
+        for target_name, block in target_source.items():
+            per_target[str(target_name)] = _metric_block(
+                block
+            )
 
-    return metrics
+    # --------------------------------------------------------
+    # Horizon-wise
+    # --------------------------------------------------------
 
+    horizon_source = (
+        payload.get("horizon_wise")
+    )
 
-def _collect_pngs() -> List[Dict[str, str]]:
-    paths = []
-    paths += sorted(glob(os.path.join(PLOTS_DIR, "*.png")))
-    paths += sorted(glob(os.path.join(CM_DIR, "*.png")))
+    if not isinstance(horizon_source, dict):
+        horizon_source = payload.get(
+            "horizons",
+            {},
+        )
 
-    plots = []
-    for p in paths:
-        plots.append({"name": os.path.basename(p), "b64": _b64(p)})
-    return plots
+    horizon_wise: Dict[str, Any] = {}
 
-
-def run_single_site_real(uploaded_csv_path: str, model_name: str, include_confusion: bool = True):
-    if not os.path.isdir(PROJECT_DIR):
-        return {"error": f"Project dir not found: {PROJECT_DIR}"}
-
-    if model_name not in MODEL_TO_CMD:
-        return {"error": f"Unknown model_name: {model_name}"}
-
-    # 1) Overwrite the file your code expects
-    os.makedirs(os.path.dirname(UNSEEN_FILE), exist_ok=True)
-    with open(uploaded_csv_path, "rb") as src, open(UNSEEN_FILE, "wb") as dst:
-        dst.write(src.read())
-
-    # 2) Run selected model
-    args = MODEL_TO_CMD[model_name]
-    rc, out, err = _run_py(args)
-
-    if rc != 0:
-        return {
-            "error": "Model run failed",
-            "model": model_name,
-            "stderr": err[-4000:],
-            "stdout": out[-4000:],
-        }
-
-    # 3) Optionally run confusion matrices
-    cm_out = ""
-    cm_err = ""
-    if include_confusion:
-        rc2, out2, err2 = _run_py(["-m", "baselines.confusion_matrices"])
-        cm_out, cm_err = out2, err2
-        # If confusion fails, we still return main model results
-        # so we do NOT hard-fail the API.
-
-    # 4) Parse metrics from output
-    metrics = _extract_metrics(out)
-
-    # 5) Collect plots as base64
-    plots = _collect_pngs()
+    if isinstance(horizon_source, dict):
+        for horizon, block in horizon_source.items():
+            horizon_wise[str(horizon)] = _metric_block(
+                block
+            )
 
     return {
         "model": model_name,
+        "overall": overall,
+        "per_target": per_target,
+        "horizon_wise": horizon_wise,
+        "evaluation_type": payload.get(
+            "evaluation_type",
+            "final_test_real_units",
+        ),
+        "dataset": (
+            payload.get("dataset")
+            or payload.get("metadata", {}).get("dataset")
+        ),
+        "model_type": (
+            payload.get("model_type")
+            or payload.get("metadata", {}).get("model_type")
+            or SINGLE_SITE_MODELS[
+                model_name
+            ]["model_type"]
+        ),
+        "target_mode": (
+            payload.get("target_mode")
+            or payload.get("metadata", {}).get("target_mode")
+            or SINGLE_SITE_MODELS[
+                model_name
+            ]["target_mode"]
+        ),
+        "residual_learning": (
+            payload.get("residual_learning")
+            if "residual_learning" in payload
+            else payload.get(
+                "metadata",
+                {},
+            ).get(
+                "residual_learning",
+                SINGLE_SITE_MODELS[
+                    model_name
+                ]["residual_learning"],
+            )
+        ),
+    }
+
+
+def _encode_file(
+    path: Path,
+) -> str:
+    with path.open("rb") as file:
+        return base64.b64encode(
+            file.read()
+        ).decode("utf-8")
+
+
+# ============================================================
+# MODEL-SPECIFIC PLOT GENERATION
+# ============================================================
+
+def _get_plot_module():
+    """
+    Import generate_model_plots from generate_single_site_plots.py.
+
+    This lives in the same app/ directory as runner.py.
+    """
+    # Ensure the app/ directory is on sys.path so we can import
+    # the sibling module without triggering circular imports.
+    app_dir_str = str(APP_DIR)
+    if app_dir_str not in sys.path:
+        sys.path.insert(0, app_dir_str)
+
+    try:
+        # Import by file path to avoid conflicts with package imports.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "generate_single_site_plots",
+            APP_DIR / "generate_single_site_plots.py",
+        )
+        mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod.generate_model_plots
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not import generate_single_site_plots: {exc}"
+        ) from exc
+
+
+def _collect_model_specific_plots(
+    model_name: str,
+) -> List[Dict[str, str]]:
+    """
+    Return base64-encoded evaluation plots for the selected model only.
+
+    Strategy:
+      1. Check if model-specific plots already exist in
+         evaluation_plots/{model_name}/.
+      2. If not, generate them on-demand from the frozen .npy arrays
+         via generate_single_site_plots.generate_model_plots().
+      3. Encode and return only the plots for this model.
+
+    Plot names returned are keys like:
+        o3_actual_vs_predicted
+        no2_actual_vs_predicted
+        o3_scatter
+        no2_scatter
+        etc.
+    which the frontend already handles correctly.
+    """
+
+    model_plot_dir = EVALUATION_PLOTS_DIR / model_name
+
+    # Check if plots already exist (cache hit).
+    existing_pngs: List[Path] = []
+    if model_plot_dir.exists():
+        existing_pngs = sorted(model_plot_dir.glob("*.png"))
+
+    if not existing_pngs:
+        # Generate model-specific plots from frozen .npy artifacts.
+        try:
+            generate_model_plots = _get_plot_module()
+            generated = generate_model_plots(model_name)
+            # generated is a dict: {plot_key: absolute_path_str}
+            # Collect paths from what was just generated.
+            existing_pngs = [
+                Path(p)
+                for p in generated.values()
+                if Path(p).exists()
+            ]
+        except Exception:
+            # Plot generation failed (e.g., missing .npy artifacts).
+            # Return empty list; the frontend handles the empty state.
+            return []
+
+    return [
+        {
+            # Strip the model prefix from the filename to get the
+            # plot key the frontend expects, e.g.:
+            #   "xgboost_o3_actual_vs_predicted.png"
+            #   → "o3_actual_vs_predicted.png"
+            "name": _strip_model_prefix(path.name, model_name),
+            "b64": _encode_file(path),
+        }
+        for path in sorted(existing_pngs)
+        if path.exists()
+    ]
+
+
+def _strip_model_prefix(filename: str, model_name: str) -> str:
+    """
+    Remove the model-name prefix from plot filenames so the frontend
+    can match them against its PLOT_LABELS dictionary.
+
+    Examples:
+        xgboost_o3_actual_vs_predicted.png → o3_actual_vs_predicted.png
+        random_forest_no2_scatter.png      → no2_scatter.png
+        lstm_training_loss.png             → lstm_training_loss.png
+          (no match → kept as-is)
+    """
+    safe_prefix = (
+        model_name
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        + "_"
+    )
+
+    if filename.startswith(safe_prefix):
+        return filename[len(safe_prefix):]
+
+    return filename
+
+
+def _artifact_status(
+    config: Dict[str, Any],
+) -> Dict[str, bool]:
+    return {
+        "metrics": Path(
+            config["metrics_path"]
+        ).exists(),
+        "predictions": Path(
+            config["prediction_path"]
+        ).exists(),
+        "truth": Path(
+            config["truth_path"]
+        ).exists(),
+        "mask": Path(
+            config["mask_path"]
+        ).exists(),
+    }
+
+
+# ============================================================
+# PUBLIC API FUNCTION
+# ============================================================
+
+def run_single_site_real(
+    uploaded_csv_path: Optional[str],
+    model_name: str,
+    include_confusion: bool = False,
+) -> Dict[str, Any]:
+    """
+    Return the final frozen single-site evaluation artifact for
+    the SELECTED MODEL only.
+
+    Plots are generated on-demand from the model's frozen .npy
+    prediction/truth/mask arrays and are specific to that model.
+    Subsequent calls for the same model reuse cached plot files.
+
+    Important:
+        The uploaded CSV is accepted by the API for interface
+        compatibility, but it is NOT substituted into the official
+        Phase 7 research evaluation.
+
+    No training occurs here.
+    No model checkpoint is modified.
+    """
+
+    del include_confusion
+
+    if model_name not in SINGLE_SITE_MODELS:
+        return {
+            "error": (
+                f"Unknown model_name: {model_name}. "
+                f"Expected one of: "
+                f"{', '.join(SINGLE_SITE_MODELS.keys())}"
+            )
+        }
+
+    config = SINGLE_SITE_MODELS[
+        model_name
+    ]
+
+    metrics_path = Path(
+        config["metrics_path"]
+    )
+
+    try:
+        payload = _load_json(
+            metrics_path
+        )
+
+        metrics = _normalize_metrics(
+            model_name,
+            payload,
+        )
+
+    except Exception as exc:
+        return {
+            "error": (
+                f"Unable to load final evaluation artifact "
+                f"for {model_name}: {exc}"
+            ),
+            "model": model_name,
+            "artifact_status": _artifact_status(
+                config
+            ),
+        }
+
+    artifact_status = _artifact_status(
+        config
+    )
+
+    warnings: List[str] = []
+
+    missing = [
+        name
+        for name, exists in artifact_status.items()
+        if not exists
+    ]
+
+    if missing:
+        warnings.append(
+            "Some saved evaluation artifacts are missing: "
+            + ", ".join(missing)
+        )
+
+    # --------------------------------------------------------
+    # Collect model-specific plots ONLY
+    # --------------------------------------------------------
+    plots = _collect_model_specific_plots(
+        model_name
+    )
+
+    return {
+        "success": True,
+        "model": model_name,
         "metrics": metrics,
         "plots": plots,
-        "logs": {
-            "stdout_tail": out[-2500:],
-            "stderr_tail": err[-2500:],
-            "cm_stdout_tail": cm_out[-1500:],
-            "cm_stderr_tail": cm_err[-1500:],
-        },
+        "warnings": warnings,
+        "evaluation_source": (
+            "official_phase_7_frozen_test_artifact"
+        ),
+        "uploaded_file_used_for_research_evaluation": False,
+        "evaluation_only": True,
+        "retraining": False,
+        "artifact_status": artifact_status,
     }
+
+
+# ============================================================
+# BACKWARD-COMPATIBLE ALIAS
+# ============================================================
+
+def run_single_site(
+    model_name: str,
+    uploaded_csv_path: Optional[str] = None,
+    include_confusion: bool = False,
+) -> Dict[str, Any]:
+    """
+    Backward-compatible wrapper for older callers.
+    """
+
+    return run_single_site_real(
+        uploaded_csv_path=uploaded_csv_path,
+        model_name=model_name,
+        include_confusion=include_confusion,
+    )

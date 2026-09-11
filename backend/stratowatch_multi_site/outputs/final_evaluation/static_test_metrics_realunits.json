@@ -1,0 +1,64 @@
+{
+  "model": "StaticGraphSTTransformer",
+  "checkpoint": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/outputs/checkpoints/static_graph_st_best.pt",
+  "dataset": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_multi_site/data/processed/splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+  "seed": 42,
+  "device": "mps",
+  "num_features": 28,
+  "num_sites": 7,
+  "tin": 24,
+  "tout": 6,
+  "overall": {
+    "mae": 19.038433074951172,
+    "rmse": 27.078136444091797,
+    "r2": 0.38504844903945923
+  },
+  "O3": {
+    "mae": 18.693880081176758,
+    "rmse": 27.554443359375,
+    "r2": 0.47418928146362305
+  },
+  "NO2": {
+    "mae": 19.38298225402832,
+    "rmse": 26.593299865722656,
+    "r2": 0.21096670627593994
+  },
+  "horizon_wise": [
+    {
+      "horizon": 1,
+      "mae": 18.934741973876953,
+      "rmse": 27.033979415893555,
+      "r2": 0.3867284059524536
+    },
+    {
+      "horizon": 2,
+      "mae": 18.94780921936035,
+      "rmse": 27.055622100830078,
+      "r2": 0.3858131766319275
+    },
+    {
+      "horizon": 3,
+      "mae": 18.94661521911621,
+      "rmse": 26.832195281982422,
+      "r2": 0.39616191387176514
+    },
+    {
+      "horizon": 4,
+      "mae": 19.08332061767578,
+      "rmse": 27.078140258789062,
+      "r2": 0.38514798879623413
+    },
+    {
+      "horizon": 5,
+      "mae": 19.127952575683594,
+      "rmse": 27.100542068481445,
+      "r2": 0.3842604160308838
+    },
+    {
+      "horizon": 6,
+      "mae": 19.190237045288086,
+      "rmse": 27.365720748901367,
+      "r2": 0.37218236923217773
+    }
+  ]
+}

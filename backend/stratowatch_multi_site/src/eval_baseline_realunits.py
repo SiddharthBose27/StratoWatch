@@ -70,27 +70,91 @@ def main():
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 
-    mae_sum, rmse_sum, n = 0.0, 0.0, 0
+    mae_sum = 0
+    rmse_sum = 0
+
+    Y_hat_all = []
+    Y_all = []
+    Y_mask_all = []
 
     with torch.no_grad():
         for X, Y, X_mask, Y_mask in test_loader:
+
             X = X.to(device)
             Y = Y.to(device)
             Y_mask = Y_mask.to(device)
 
-            Y_hat, _ = model(X)
+            Y_hat, _ = model(X, X_mask)
 
-            # Inverse transform both prediction and target to real units
             Y_hat_real = inverse_scale(Y_hat, mean, std)
             Y_real = inverse_scale(Y, mean, std)
 
-            mae_sum += float(masked_mae(Y_hat_real, Y_real, Y_mask).item())
-            rmse_sum += float(masked_rmse(Y_hat_real, Y_real, Y_mask).item())
-            n += 1
+            Y_hat_all.append(Y_hat_real.cpu())
+            Y_all.append(Y_real.cpu())
+            Y_mask_all.append(Y_mask.cpu())
 
-    print("\nTEST results (REAL units):")
-    print("MAE :", mae_sum / n)
-    print("RMSE:", rmse_sum / n)
+    Y_hat_all = torch.cat(Y_hat_all, dim=0)
+    Y_all = torch.cat(Y_all, dim=0)
+    Y_mask_all = torch.cat(Y_mask_all, dim=0)
+    
+    # Calculate global MAE and RMSE
+    diff = (Y_hat_all - Y_all) * Y_mask_all
+    mae = torch.sum(torch.abs(diff)) / (torch.sum(Y_mask_all) + 1e-8)
+    rmse = torch.sqrt(torch.sum(diff**2) / (torch.sum(Y_mask_all) + 1e-8))
+    
+    # Calculate global R2
+    # R2 = 1 - (SS_res / SS_tot)
+    ss_res = torch.sum((diff)**2)
+    
+    # Global mean of Y for R2
+    y_mean = torch.sum(Y_all * Y_mask_all) / (torch.sum(Y_mask_all) + 1e-8)
+    ss_tot = torch.sum(((Y_all - y_mean) * Y_mask_all)**2)
+    r2 = 1 - (ss_res / (ss_tot + 1e-8))
+
+    print("\nBaseline ST TEST results (REAL units):")
+    print(f"MAE : {mae.item():.4f}")
+    print(f"RMSE: {rmse.item():.4f}")
+    print(f"R2  : {r2.item():.4f}")
+
+    # Persist the exact arrays used for the frozen evaluation.  Graph-ST
+    # evaluation already writes the equivalent artifacts; keeping the
+    # baseline in the same convention lets downstream plotting consume real
+    # predictions rather than reconstructing anything from summary metrics.
+    output_dir = os.path.join(project_root, "outputs", "final_evaluation")
+    os.makedirs(output_dir, exist_ok=True)
+
+    np.save(
+        os.path.join(output_dir, "st_test_predictions_real.npy"),
+        Y_hat_all.numpy(),
+    )
+    np.save(
+        os.path.join(output_dir, "st_test_truth_real.npy"),
+        Y_all.numpy(),
+    )
+    np.save(
+        os.path.join(output_dir, "st_test_mask.npy"),
+        Y_mask_all.numpy(),
+    )
+    
+    # Calculate separate metrics for O3 (idx 0) and NO2 (idx 1)
+    target_names = ["O3", "NO2"]
+    for i, name in enumerate(target_names):
+        diff_i = diff[:, :, :, i]
+        mask_i = Y_mask_all[:, :, :, i]
+        y_i = Y_all[:, :, :, i]
+        
+        mae_i = torch.sum(torch.abs(diff_i)) / (torch.sum(mask_i) + 1e-8)
+        rmse_i = torch.sqrt(torch.sum(diff_i**2) / (torch.sum(mask_i) + 1e-8))
+        
+        y_mean_i = torch.sum(y_i * mask_i) / (torch.sum(mask_i) + 1e-8)
+        ss_res_i = torch.sum((diff_i)**2)
+        ss_tot_i = torch.sum(((y_i - y_mean_i) * mask_i)**2)
+        r2_i = 1 - (ss_res_i / (ss_tot_i + 1e-8))
+        
+        print(f"\n{name} TEST results (REAL units):")
+        print(f"{name}_MAE : {mae_i.item():.4f}")
+        print(f"{name}_RMSE: {rmse_i.item():.4f}")
+        print(f"{name}_R2  : {r2_i.item():.4f}")
 
 
 if __name__ == "__main__":

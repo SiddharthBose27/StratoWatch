@@ -1,0 +1,150 @@
+{
+  "experiment": {
+    "model": "TemporalTransformer",
+    "task": "single_site_direct_multi_horizon_forecasting",
+    "dataset_version": "stratowatch_single_v2",
+    "artifact_version": "artifact_v1",
+    "seed": 42,
+    "device": "cpu",
+    "input_window": 24,
+    "forecast_horizon": 6,
+    "num_features": 134,
+    "num_targets": 2,
+    "d_model": 128,
+    "nhead": 8,
+    "num_layers": 3,
+    "dropout": 0.1,
+    "batch_size": 64,
+    "max_epochs": 50,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "best_epoch": 1,
+    "best_val_mse": 0.19581418979328638
+  },
+  "data": {
+    "artifact_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_scaled.npz",
+    "config_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_config.json",
+    "metadata_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_scaled_metadata.json",
+    "target_scaler_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_target_scaler.pkl",
+    "feature_scaler_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_data/artifacts/test_singlesite/stratowatch_single_v2_feature_scaler.pkl",
+    "feature_list_path": "/Users/siddharthbose/Desktop/stratowatch/backend/stratowatch_single_site/data/feature_list.json",
+    "train_shape": [
+      30438,
+      24,
+      134
+    ],
+    "val_shape": [
+      6522,
+      24,
+      134
+    ],
+    "test_shape": [
+      6464,
+      24,
+      134
+    ]
+  },
+  "transformer": {
+    "overall": {
+      "MAE": 0.570001482963562,
+      "RMSE": 0.7524013223931526,
+      "R2": 0.0016539692878723145
+    },
+    "per_target": {
+      "O3": {
+        "MAE": 0.5806534886360168,
+        "RMSE": 0.7391932672217731,
+        "R2": -1.2562732696533203
+      },
+      "NO2": {
+        "MAE": 0.5593494772911072,
+        "RMSE": 0.765381482381126,
+        "R2": 0.19800084829330444
+      }
+    },
+    "per_horizon": {
+      "horizon_1": {
+        "MAE": 0.5333445072174072,
+        "RMSE": 0.7094533750955582,
+        "R2": 0.11179167032241821
+      },
+      "horizon_2": {
+        "MAE": 0.5112956762313843,
+        "RMSE": 0.6880952035895593,
+        "R2": 0.16468477249145508
+      },
+      "horizon_3": {
+        "MAE": 0.5856667160987854,
+        "RMSE": 0.7634186385795888,
+        "R2": -0.027933716773986816
+      },
+      "horizon_4": {
+        "MAE": 0.5610567331314087,
+        "RMSE": 0.7473098271204012,
+        "R2": 0.015246272087097168
+      },
+      "horizon_5": {
+        "MAE": 0.5784648656845093,
+        "RMSE": 0.7642245427023059,
+        "R2": -0.029566168785095215
+      },
+      "horizon_6": {
+        "MAE": 0.650180459022522,
+        "RMSE": 0.8333837056830303,
+        "R2": -0.2240074872970581
+      }
+    }
+  },
+  "forecast_reference_baseline": {
+    "description": "Final available input-timestep O3/NO2 forecast values repeated across the six forecast horizons. This is a reference baseline and not a full future-horizon forecast-field baseline.",
+    "overall": {
+      "MAE": 1.2383785247802734,
+      "RMSE": 1.5116150497630156,
+      "R2": -3.029623031616211
+    },
+    "per_target": {
+      "O3": {
+        "MAE": 1.300792932510376,
+        "RMSE": 1.4397603383899462,
+        "R2": -7.559652328491211
+      },
+      "NO2": {
+        "MAE": 1.175964117050171,
+        "RMSE": 1.580205773100249,
+        "R2": -2.418576240539551
+      }
+    },
+    "per_horizon": {
+      "horizon_1": {
+        "MAE": 1.2664896249771118,
+        "RMSE": 1.5573754006353215,
+        "R2": -3.2800989151000977
+      },
+      "horizon_2": {
+        "MAE": 1.255231499671936,
+        "RMSE": 1.5378865818225362,
+        "R2": -3.172553539276123
+      },
+      "horizon_3": {
+        "MAE": 1.2418652772903442,
+        "RMSE": 1.5156470228345216,
+        "R2": -3.051685333251953
+      },
+      "horizon_4": {
+        "MAE": 1.2306753396987915,
+        "RMSE": 1.4980268215941035,
+        "R2": -2.95699405670166
+      },
+      "horizon_5": {
+        "MAE": 1.2217369079589844,
+        "RMSE": 1.4845910969089644,
+        "R2": -2.885312557220459
+      },
+      "horizon_6": {
+        "MAE": 1.2142726182937622,
+        "RMSE": 1.4744784063321328,
+        "R2": -2.8315181732177734
+      }
+    }
+  }
+}

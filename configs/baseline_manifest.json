@@ -1,0 +1,130 @@
+{
+  "baseline_date": "2026-09-06",
+  "repository": "/Users/siddharthbose/Desktop/stratowatch",
+  "runtime": {
+    "python": "3.13.5",
+    "node": "24.8.0",
+    "npm": "11.6.0",
+    "pytest_available": false,
+    "frontend_node_modules_available": true
+  },
+  "frontend": {
+    "package_json": { "path": "package.json", "exists": true },
+    "package_lock": { "path": "package-lock.json", "exists": true },
+    "scripts": ["dev", "build", "lint", "preview"]
+  },
+  "artifacts": {
+    "single_site_sequences": {
+      "path": "backend/stratowatch_single_site/data/sequences.npz",
+      "exists": true,
+      "size_bytes": 708945801,
+      "observed_schema": { "X_seq": [43489, 24, 179], "y_seq": [43489, 2] }
+    },
+    "single_site_feature_list": {
+      "path": "backend/stratowatch_single_site/data/feature_list.json",
+      "exists": true,
+      "size_bytes": 2927,
+      "observed_feature_count": 134,
+      "target_feature_names": ["O3_forecast", "NO2_forecast"]
+    },
+    "single_site_residual_scaler": {
+      "path": "backend/stratowatch_single_site/data/y_res_scaler.pkl",
+      "exists": true,
+      "size_bytes": 631,
+      "load_status": "FAILED",
+      "load_error": "UnpicklingError: invalid load key, '\\x09'"
+    },
+    "multi_site_final_npz": {
+      "path": "backend/stratowatch_multi_site/data/processed/splits_final_Yscaled_Tin24_Tout6_stride1.npz",
+      "exists": true,
+      "size_bytes": 16964354,
+      "observed_shapes": {
+        "X_train": [21182, 24, 7, 28],
+        "X_val": [4539, 24, 7, 28],
+        "X_test": [4539, 24, 7, 28],
+        "Y_train": [21182, 6, 7, 2],
+        "Y_val": [4539, 6, 7, 2],
+        "Y_test": [4539, 6, 7, 2]
+      },
+      "observed_sites": [1, 2, 3, 4, 5, 6, 7],
+      "observed_feature_count": 28,
+      "observed_target_count": 2,
+      "observed_tin": 24,
+      "observed_tout": 6
+    },
+    "target_scaler": {
+      "path": "backend/stratowatch_multi_site/configs/target_scaler.json",
+      "exists": true,
+      "size_bytes": 179,
+      "targets": ["O3_target", "NO2_target"]
+    },
+    "feature_scaler": {
+      "path": "backend/stratowatch_multi_site/configs/final_feature_scaler.json",
+      "exists": true,
+      "size_bytes": 1425,
+      "observed_feature_count": 28
+    },
+    "global_scaler": {
+      "path": "backend/stratowatch_multi_site/configs/global_scaler.json",
+      "exists": true,
+      "size_bytes": 997,
+      "observed_feature_count": 14
+    },
+    "adjacency": {
+      "path": "backend/stratowatch_multi_site/data/processed/adjacency_final.npy",
+      "exists": true,
+      "size_bytes": 520,
+      "observed_shape": [7, 7]
+    },
+    "coordinates": {
+      "path": "backend/stratowatch_multi_site/configs/site_coords_raw.npy",
+      "exists": true,
+      "size_bytes": 184,
+      "observed_shape": [7, 2]
+    },
+    "multi_site_checkpoints": {
+      "st_transformer": {
+        "path": "backend/stratowatch_multi_site/outputs/checkpoints/st_transformer_best.pt",
+        "exists": true,
+        "size_bytes": 9547131,
+        "load_status": "LOADED",
+        "num_features": 28
+      },
+      "graph_st": {
+        "path": "backend/stratowatch_multi_site/outputs/checkpoints/graph_st_best.pt",
+        "exists": true,
+        "size_bytes": 9596603,
+        "load_status": "LOADED"
+      },
+      "dynamic_wind_graph_st": {
+        "path": "backend/stratowatch_multi_site/outputs/checkpoints/dynamic_wind_graph_st_best.pt",
+        "exists": false
+      }
+    },
+    "single_site_checkpoints": {
+      "transformer": {
+        "path": "backend/stratowatch_single_site/outputs/checkpoints/best_model.pt",
+        "exists": true,
+        "size_bytes": 1699125
+      },
+      "lstm": {
+        "path": "backend/stratowatch_single_site/outputs/checkpoints/best_lstm.pt",
+        "exists": true,
+        "size_bytes": 1167907
+      },
+      "tcn": {
+        "path": "backend/stratowatch_single_site/outputs/checkpoints/best_tcn.pt",
+        "exists": true,
+        "size_bytes": 438917
+      }
+    }
+  },
+  "frozen_findings": {
+    "multi_site_final_feature_count_differs_from_phase_0_description": true,
+    "single_site_feature_list_width_differs_from_sequence_width": true,
+    "single_site_residual_scaler_is_unloadable": true,
+    "random_forest_key_mismatch": true,
+    "multi_site_uploads_are_not_used_for_inference": true,
+    "static_and_dynamic_graph_paths_share_evaluator": true
+  }
+}
