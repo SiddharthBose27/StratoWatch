@@ -107,7 +107,10 @@ To connect a deployed backend to the Vercel frontend, set the `VITE_API_BASE_URL
 
 ## Research
 
-The research paper associated with this project is located in `docs/` (not yet publicly linked).
+The research paper associated with this project is available in [`paper/`](paper/).
+
+- [`StratoWatch Research Paper (PDF)`](paper/Stratowatch_research_paper.pdf)
+- [`LaTeX Source`](paper/paper.tex)
 
 The complete verified experimental results are in [`results/FINAL_RESULTS.md`](results/FINAL_RESULTS.md).
 

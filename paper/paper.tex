@@ -1,0 +1,761 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage{amsmath,amssymb}
+\usepackage{newtxtext,newtxmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{cite}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{orcidlink}
+
+\begin{document}
+
+% -------------------------------------------------------
+% TITLE
+% -------------------------------------------------------
+
+\title{
+\textbf{\textit{StratoWatch: Air Quality Forecasting}}\\[3pt]
+\textbf{\textit{with Spatio-Temporal Transformers and Graph-Aware Modeling}}
+}
+
+\author{
+\IEEEauthorblockN{1\textsuperscript{st} Siddharth Bose \orcidlink{0009-0009-5156-5996}}
+\IEEEauthorblockA{
+School of Computer Science and Technology\\
+Bennett University, Greater Noida, India\\
+\href{mailto:s24cseu0543@bennett.edu.in}{s24cseu0543@bennett.edu.in}}
+}
+
+\maketitle
+
+% -------------------------------------------------------
+% ABSTRACT
+% -------------------------------------------------------
+
+\begin{abstract}
+Forecasting ground-level ozone (O$_3$) and nitrogen dioxide (NO$_2$) a few hours ahead is
+difficult because pollutant concentrations depend on both recent atmospheric conditions and
+rapidly changing meteorological patterns. StratoWatch is a forecasting and evaluation
+framework motivated by ISRO Problem Statement 25178 that studies this problem at both
+single-site and multi-site scales. At the single-site level, we compare a forecast-only
+baseline with Random Forest, XGBoost, LSTM, TCN, and a temporal Transformer using a 24-hour
+input window and a 6-hour forecast horizon. XGBoost gives the strongest single-site result,
+with an MAE of 0.4039 and an $R^2$ of 0.3848 in the near-normalized evaluation units. We then
+extend the problem to seven Delhi monitoring stations using a spatio-temporal Transformer
+and two graph-based variants. The plain ST-Transformer obtains the lowest MAE at
+18.8349~$\mu$g/m$^3$, while the Dynamic Wind Graph ST-Transformer obtains the lowest RMSE
+of 26.9455~$\mu$g/m$^3$ and the highest $R^2$ of 0.3911. These results suggest that explicit
+spatial modeling is useful, although its benefit depends on the evaluation metric rather than
+producing a uniform improvement. The current system is a short-horizon research prototype
+rather than a complete 24--48 hour operational forecasting system. Alongside the experiments,
+StratoWatch provides a React/FastAPI interface for running the forecasting pipelines and
+viewing their results.
+\end{abstract}
+
+\begin{IEEEkeywords}
+air quality forecasting, ozone, nitrogen dioxide, transformers,
+spatio-temporal forecasting, graph neural networks, Delhi, ISRO
+\end{IEEEkeywords}
+
+% -------------------------------------------------------
+\section{Introduction}
+% -------------------------------------------------------
+
+Air-quality forecasting is difficult because pollutant concentrations are affected by several
+processes at the same time. O$_3$ and NO$_2$ respond to recent concentration history, wind,
+temperature, humidity, boundary-layer conditions, and other atmospheric variables. These
+effects can change considerably from one hour to the next. This makes short-term forecasting
+different from simply predicting a smooth time series: a model also has to deal with sudden
+changes and pollution peaks.
+
+Physics-based forecasts provide an important starting point for this problem, but their
+predictions can still contain systematic errors at individual locations. Machine learning
+offers a way to learn patterns in historical observations and environmental variables that may
+not be fully captured by the initial forecast.
+
+This work was motivated by ISRO Problem Statement 25178, which focuses on automated forecasting
+of surface-level O$_3$ and NO$_2$ using artificial intelligence and machine learning. The
+implementation presented here should be viewed as a research prototype motivated by that
+problem rather than a complete implementation of its 24--48-hour operational requirement.
+The experiments currently use a six-hour forecast horizon so that the different model
+architectures can be compared under the same evaluation setting.
+
+The study has two main parts. The first evaluates forecasting models at a single-site level.
+The second moves to a seven-site setting and asks whether explicitly representing relationships
+between monitoring stations improves forecasting performance.
+
+The second question is particularly interesting because nearby stations are not independent.
+Pollution can move between locations, and wind can provide information about the direction of
+that movement. At the same time, meteorological variables already provide some of this
+information directly to a forecasting model. It is therefore not obvious how much additional
+information an explicit spatial graph will provide.
+
+The main contributions of this work are:
+
+\begin{enumerate}
+\item A single-site forecasting pipeline comparing tree-based, recurrent, convolutional,
+and Transformer models for six-hour O$_3$ and NO$_2$ forecasting.
+\item A seven-station spatio-temporal forecasting pipeline using a shared Transformer
+representation across monitoring stations.
+\item Static and wind-aware dynamic graph variants for testing the effect of explicit
+spatial relationships between stations.
+\item A reproducible evaluation structure based on frozen model artifacts and consolidated
+evaluation results.
+\item A working web-based interface that connects the forecasting models to a FastAPI
+backend and allows results to be inspected without running the research code manually.
+\end{enumerate}
+
+% -------------------------------------------------------
+\section{Related Work}
+% -------------------------------------------------------
+
+\subsection{Machine Learning for Air Quality Forecasting}
+
+Machine learning has been widely used for air-quality forecasting because pollutant
+concentrations depend on nonlinear relationships between historical measurements and
+environmental variables. Tree-based methods are particularly useful when the input contains
+many engineered variables and nonlinear interactions. XGBoost provides an efficient gradient
+boosting framework for this type of tabular learning problem \cite{xgboost}.
+
+\subsection{Sequence Modeling}
+
+Recurrent models such as Long Short-Term Memory (LSTM) networks are designed to capture
+dependencies in sequential data and have therefore been used extensively for environmental
+forecasting \cite{lstm}. Temporal Convolutional Networks (TCNs) provide another approach,
+using causal and dilated convolutions to model dependencies over different temporal scales
+\cite{tcn}.
+
+\subsection{Transformers for Time-Series Forecasting}
+
+Transformers use self-attention to allow information from different positions in a sequence to
+interact directly \cite{vaswani}. This makes them attractive for forecasting problems where
+recent and older observations may both contain useful information. Informer further explored
+efficient Transformer-based forecasting for long sequences \cite{informer}. In StratoWatch,
+Transformer encoders are used to model temporal dependencies over a fixed 24-hour input
+window.
+
+\subsection{Spatio-Temporal Graph Models}
+
+When observations come from multiple monitoring locations, the spatial relationship between
+stations becomes another possible source of information. Graph-based forecasting methods
+represent locations as nodes and use edges to exchange information between them. Examples
+include Graph WaveNet, AGCRN, and DCRNN \cite{graphwavenet,agcrn,dcrnn}. Recent air-quality
+work has also explored combinations of graph and Transformer architectures, including
+CEEMDAN-GNN-Transformer and extreme-event-oriented spatio-temporal graph models
+\cite{ceemdan2025,estgcn2025}.
+
+These approaches motivate the multi-site experiments in StratoWatch, where spatial graph
+information is compared against a Transformer that already receives meteorological and
+multi-station information.
+
+% -------------------------------------------------------
+\section{Problem Formulation}
+% -------------------------------------------------------
+
+For the single-site experiment, the model receives a historical window of observations and
+engineered environmental features. Let
+
+\begin{equation}
+X_t \in \mathbb{R}^{T \times F}
+\end{equation}
+
+denote the input sequence, where $T=24$ hours and $F=134$ input features. The model predicts
+both pollutants over the next six hours:
+
+\begin{equation}
+\hat{Y}_t \in \mathbb{R}^{H \times C},
+\end{equation}
+
+where $H=6$ and $C=2$, corresponding to O$_3$ and NO$_2$.
+
+The final single-site XGBoost model uses direct target prediction rather than residual
+correction. The 24-hour history is flattened into a 3,216-dimensional feature vector
+($24\times134$), and twelve independent regressors are used for the six forecast horizons and
+two target pollutants.
+
+For the multi-site experiment, the input is represented as
+
+\begin{equation}
+X \in \mathbb{R}^{T \times S \times F},
+\end{equation}
+
+where $T=24$ hours, $S=7$ monitoring stations, and $F=28$ features per station. The output is
+
+\begin{equation}
+\hat{Y} \in \mathbb{R}^{H \times S \times C},
+\end{equation}
+
+where $H=6$ forecast hours and $C=2$ target pollutants.
+
+% -------------------------------------------------------
+\section{Dataset and Preprocessing}
+% -------------------------------------------------------
+
+\subsection{Data Sources}
+
+The forecasting pipelines combine ground-level pollutant observations with meteorological,
+satellite-derived, and forecast-related variables. The data are aligned to an hourly time
+grid before being converted into model inputs.
+
+\begin{table}[htbp]
+\centering
+\caption{Main Data Sources Used by StratoWatch}
+\label{tab:data_sources}
+\begin{tabular}{p{0.25\columnwidth} p{0.34\columnwidth} p{0.29\columnwidth}}
+\toprule
+\textbf{Source} & \textbf{Variables} & \textbf{Purpose} \\
+\midrule
+Ground stations & Hourly O$_3$, NO$_2$ & Target observations \\
+Meteorology & Temperature, humidity, wind, boundary-layer variables & Atmospheric context \\
+Satellite data & Trace-gas observations & Regional chemical context \\
+Forecast variables & Forecast-related pollutant/environmental variables & Additional predictive information \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Seven monitoring stations are used for the final multi-site experiment. The final single-site
+pipeline uses 134 input features, while the multi-site representation contains 28 features per
+station.
+
+\subsection{Preprocessing}
+
+The data are aligned to an hourly time grid and transformed into fixed-length historical
+windows. Feature scaling is performed using the appropriate training-derived statistics.
+
+The feature construction includes temporal information and meteorological variables, with
+lagged and rolling information used where available. Wind direction is represented in a form
+that can be used by the forecasting models rather than treating the circular direction value
+as an ordinary scalar.
+
+A chronological 70/15/15 train/validation/test split is used for the model experiments. The
+test data are kept separate from training and model-selection decisions.
+
+\subsection{Normalization and Evaluation Units}
+
+An important distinction exists between the two final experiments. The final single-site
+evaluation operates in near-normalized target units because the official single-site dataset
+is already normalized and the corresponding target scaler has mean values close to zero and
+unit scale. Its MAE and RMSE therefore should not be interpreted directly as
+$\mu$g/m$^3$.
+
+The final multi-site results are inverse-scaled into real concentration units using the final
+target scaler. The target statistics are approximately 31.967~$\mu$g/m$^3$ mean and
+34.720~$\mu$g/m$^3$ standard deviation for O$_3$, and 39.133~$\mu$g/m$^3$ mean and
+29.909~$\mu$g/m$^3$ standard deviation for NO$_2$.
+
+This distinction is important when comparing results across the two experiments.
+
+\subsection{Graph Construction}
+
+Two graph variants are evaluated in addition to the plain ST-Transformer.
+
+The static graph represents fixed spatial relationships between stations using geographic
+proximity. Each station is connected to its nearest neighbouring stations using
+distance-based weights.
+
+The dynamic wind graph retains candidate spatial relationships but changes their effective
+strength using the prevailing wind information. The purpose is to test whether a graph that
+changes with atmospheric transport conditions provides useful information beyond the
+meteorological variables already supplied to the model.
+
+% -------------------------------------------------------
+\section{Proposed Methodology}
+% -------------------------------------------------------
+
+\subsection{Single-Site Models}
+
+Five final single-site model families are compared: Forecast-only Baseline, Random Forest,
+XGBoost, TCN, LSTM, and a temporal Transformer.
+
+The Forecast-only Baseline provides a reference point without an additional learned forecasting
+model. Random Forest provides a non-neural tree ensemble, while XGBoost provides gradient
+boosted decision trees. The sequence models use the same general 24-hour forecasting setting
+but learn temporal representations differently.
+
+The final XGBoost implementation is a direct-target model. It uses twelve independent
+XGBRegressor models, corresponding to each combination of six forecast horizons and two target
+pollutants. The input contains 24 hours of 134 features, resulting in 3,216 input values per
+sample.
+
+\subsection{Temporal Models}
+
+The LSTM processes the historical sequence recurrently, allowing information from earlier
+hours to influence the forecast. The TCN uses temporal convolutions to capture dependencies
+over different receptive-field sizes.
+
+The temporal Transformer first projects the input features into a latent representation and
+then applies self-attention across the historical time dimension. The final model configuration
+uses a model dimension of 128, four attention heads, two temporal layers, dropout of 0.1,
+SmoothL1Loss, and AdamW optimization.
+
+\subsection{Multi-Site ST-Transformer}
+
+The multi-site ST-Transformer processes the seven monitoring stations jointly. Each station
+provides 28 features per hour over the 24-hour input window. Temporal dependencies are modeled
+before allowing information from the different stations to interact.
+
+The model predicts the complete six-hour horizon directly rather than generating one step and
+feeding that prediction back into the model. This avoids the accumulation of autoregressive
+errors across the six forecast steps.
+
+\subsection{Graph-Enhanced Models}
+
+The Static Graph ST-Transformer adds fixed spatial information between stations. The Dynamic
+Wind Graph ST-Transformer extends this idea by changing graph connectivity strength according
+to wind conditions.
+
+The purpose of these models is not to assume that a graph must improve performance. Instead,
+the experiments test whether explicit spatial structure provides useful information once
+multi-station observations and meteorological variables are already available.
+
+\begin{table}[htbp]
+\centering
+\caption{Main Model Configuration}
+\label{tab:hyper}
+\begin{tabular}{p{0.50\columnwidth} p{0.38\columnwidth}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Input window & 24 hours \\
+Forecast horizon & 6 hours \\
+Multi-site stations & 7 \\
+Single-site features & 134 \\
+Multi-site features/site & 28 \\
+Targets & O$_3$, NO$_2$ \\
+Transformer dimension & 128 \\
+Attention heads & 4 \\
+Temporal layers & 2 \\
+Dropout & 0.1 \\
+Loss & SmoothL1Loss \\
+Optimizer & AdamW \\
+Early stopping & Patience 5 \\
+Random seed for Transformer models & 42 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% -------------------------------------------------------
+\section{Experiments and Evaluation}
+% -------------------------------------------------------
+
+\subsection{Experimental Setup}
+
+The final results are taken from frozen evaluation artifacts produced after the model
+experiments were completed. The research figures are generated from these consolidated
+results; no additional training is performed during figure generation.
+
+The single-site test set contains 6,464 samples. The multi-site evaluation uses the frozen
+seven-station configuration and reports results after inverse scaling to real concentration
+units.
+
+\subsection{Evaluation Metrics}
+
+Three standard metrics are used:
+
+\begin{equation}
+\mathrm{MAE} =
+\frac{1}{N}\sum_{i=1}^{N}|y_i-\hat{y}_i|
+\end{equation}
+
+\begin{equation}
+\mathrm{RMSE} =
+\sqrt{\frac{1}{N}\sum_{i=1}^{N}(y_i-\hat{y}_i)^2}
+\end{equation}
+
+and
+
+\begin{equation}
+R^2 =
+1-\frac{\sum_i(y_i-\hat{y}_i)^2}
+{\sum_i(y_i-\bar{y})^2}.
+\end{equation}
+
+MAE measures the average absolute forecasting error, RMSE gives greater weight to larger
+errors, and $R^2$ measures the fraction of variance explained relative to the mean predictor.
+
+% -------------------------------------------------------
+\section{Results and Discussion}
+% -------------------------------------------------------
+
+\subsection{Single-Site Results}
+
+Table~\ref{tab:single_site} shows the final single-site comparison. All values are reported
+in the near-normalized evaluation units described in Section IV-C.
+
+\begin{table*}[htbp]
+\centering
+\caption{Final Single-Site Model Performance in Near-Normalized Units}
+\label{tab:single_site}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{MAE} & \textbf{RMSE} & \textbf{$R^2$} \\
+\midrule
+Forecast-only Baseline & 1.2384 & 1.5116 & -3.0296 \\
+Random Forest & 0.4392 & 0.6526 & 0.2489 \\
+\textbf{XGBoost} & \textbf{0.4039} & \textbf{0.5906} & \textbf{0.3848} \\
+TCN & 0.5588 & 0.7427 & 0.0273 \\
+LSTM & 0.6616 & 0.8296 & -0.2138 \\
+Transformer & 0.5700 & 0.7524 & 0.0017 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+XGBoost gives the strongest overall single-site result across all three reported metrics.
+Its MAE is 0.4039, compared with 0.4392 for Random Forest. Its $R^2$ of 0.3848 also exceeds
+the other evaluated models.
+
+The result is useful because the single-site input contains a relatively large number of
+engineered features compared with the length of the historical window. In this setting,
+the tree-based models appear to make more effective use of the tabular representation than
+the sequence models evaluated here.
+
+The Forecast-only Baseline performs substantially worse, with an MAE of 1.2384 and a negative
+$R^2$ of -3.0296. This provides a useful reference for the learned models, although the
+near-normalized evaluation units mean that the magnitude should not be interpreted as a
+physical concentration error.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{01_single_site_mae.png}
+\caption{Final single-site MAE comparison across the evaluated models.}
+\label{fig:single_mae}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{03_single_site_r2.png}
+\caption{Final single-site $R^2$ comparison across the evaluated models.}
+\label{fig:single_r2}
+\end{figure}
+
+\subsection{Single-Site Target and Horizon Analysis}
+
+For the final XGBoost model, the O$_3$ MAE is 0.3045 while the NO$_2$ MAE is 0.5034. The
+corresponding $R^2$ values are 0.0609 and 0.3561, respectively. This indicates that the model
+explains more of the variation in NO$_2$ than in O$_3$ under the current evaluation setup.
+
+Performance also changes with forecast horizon. XGBoost obtains an MAE of 0.3497 at H+1,
+which gradually increases to 0.4451 at H+6. Its $R^2$ decreases from 0.5306 at H+1 to
+0.2673 at H+6.
+
+\begin{table}[htbp]
+\centering
+\caption{Final XGBoost Horizon-Wise Performance}
+\label{tab:xgb_horizon}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Horizon} & \textbf{MAE} & \textbf{RMSE} & \textbf{$R^2$} \\
+\midrule
+H+1 & 0.3497 & 0.5157 & 0.5306 \\
+H+2 & 0.3731 & 0.5469 & 0.4723 \\
+H+3 & 0.3968 & 0.5810 & 0.4046 \\
+H+4 & 0.4225 & 0.6145 & 0.3342 \\
+H+5 & 0.4364 & 0.6303 & 0.2998 \\
+H+6 & 0.4451 & 0.6448 & 0.2673 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The gradual increase in error with horizon is expected in a short-term forecasting problem:
+as the prediction moves further away from the observed history, uncertainty increases. The
+result also shows that the first forecast hour contains considerably more predictable
+information than the later hours.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{05_single_site_horizon_mae.png}
+\caption{XGBoost MAE across the six forecast horizons in the single-site experiment.}
+\label{fig:single_horizon}
+\end{figure}
+
+\subsection{Multi-Site Results}
+
+The multi-site results are reported in real concentration units after inverse scaling.
+Table~\ref{tab:multi_site} compares the plain ST-Transformer with the two graph-enhanced
+variants.
+
+\begin{table}[htbp]
+\centering
+\caption{Final Multi-Site Model Performance in $\mu$g/m$^3$}
+\label{tab:multi_site}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{MAE} & \textbf{RMSE} & \textbf{$R^2$} \\
+\midrule
+ST-Transformer & \textbf{18.8349} & 27.9747 & 0.3437 \\
+Static Graph ST & 19.0384 & 27.0781 & 0.3850 \\
+Dynamic Wind Graph ST & 19.0464 & \textbf{26.9455} & \textbf{0.3911} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The three models are relatively close in overall performance, but they do not produce the
+same ranking for every metric. The plain ST-Transformer obtains the lowest MAE at
+18.8349~$\mu$g/m$^3$. The Static Graph ST-Transformer improves on it in RMSE and $R^2$,
+while the Dynamic Wind Graph ST-Transformer gives the best RMSE of 26.9455~$\mu$g/m$^3$ and
+the highest $R^2$ of 0.3911.
+
+This is different from simply saying that graph modeling either works or does not work.
+Under the current configuration, graph modeling provides a modest improvement in metrics that
+are more sensitive to larger errors and explained variance, while the plain ST-Transformer
+retains the best average absolute error.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{06_multi_site_mae.png}
+\caption{Final multi-site MAE comparison.}
+\label{fig:multi_mae}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{08_multi_site_r2.png}
+\caption{Final multi-site $R^2$ comparison.}
+\label{fig:multi_r2}
+\end{figure}
+
+\subsection{Multi-Site Target Analysis}
+
+For the ST-Transformer, O$_3$ obtains an MAE of 19.0729~$\mu$g/m$^3$ and an $R^2$ of 0.4078,
+while NO$_2$ obtains an MAE of 18.5969~$\mu$g/m$^3$ and an $R^2$ of 0.2078.
+
+For the Dynamic Wind Graph ST-Transformer, O$_3$ obtains an MAE of
+18.7858~$\mu$g/m$^3$ and an $R^2$ of 0.4769. NO$_2$ obtains an MAE of
+19.3071~$\mu$g/m$^3$ and an $R^2$ of 0.2226.
+
+The difference between the pollutants is therefore not uniform across all metrics. The
+dynamic graph performs particularly well for O$_3$ in terms of explained variance, while its
+NO$_2$ MAE is slightly higher.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{09_multi_site_o3_no2_mae.png}
+\caption{O$_3$ and NO$_2$ MAE comparison for the final multi-site models.}
+\label{fig:multi_target}
+\end{figure}
+
+\subsection{Multi-Site Horizon Analysis}
+
+The Static Graph and Dynamic Wind Graph models show a gradual increase in MAE as the forecast
+moves from H+1 to H+6. For the Dynamic Wind Graph ST-Transformer, MAE increases from
+18.8561~$\mu$g/m$^3$ at H+1 to 19.2365~$\mu$g/m$^3$ at H+6.
+
+Its $R^2$ remains relatively stable over the six horizons, ranging from 0.3975 at H+1 to
+0.3752 at H+6. This suggests that although the absolute error increases with horizon, the
+overall explained variance does not collapse over the six-hour prediction window.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{10_multi_site_horizon_mae.png}
+\caption{Horizon-wise MAE for the final multi-site graph models.}
+\label{fig:multi_horizon_mae}
+\end{figure}
+
+% -------------------------------------------------------
+\section{Qualitative Analysis}
+% -------------------------------------------------------
+
+Quantitative metrics describe average behaviour, but they do not show exactly where a model
+struggles. The final evaluation therefore includes prediction-versus-actual plots for the
+pollutants.
+
+Figure~\ref{fig:prediction_o3} shows the final O$_3$ prediction comparison, while
+Figure~\ref{fig:prediction_no2} shows the corresponding NO$_2$ result.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{12_prediction_vs_actual_o3.png}
+\caption{Prediction versus actual O$_3$ values from the final evaluation.}
+\label{fig:prediction_o3}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{12_prediction_vs_actual_no2.png}
+\caption{Prediction versus actual NO$_2$ values from the final evaluation.}
+\label{fig:prediction_no2}
+\end{figure}
+
+The final evaluation also shows a tendency to underestimate some high-pollution episodes.
+This behaviour matters because an early-warning system is particularly sensitive to missed
+peaks. Average error metrics alone can hide this failure mode, especially when most samples
+are closer to normal concentration levels.
+
+The present results therefore suggest that future work should evaluate models not only by
+overall MAE and RMSE, but also by their behaviour during high-concentration events.
+
+% -------------------------------------------------------
+\section{System Implementation}
+% -------------------------------------------------------
+
+The research models are integrated into the StratoWatch web application. The frontend is
+implemented using React and Vite, while the backend uses FastAPI. The backend exposes separate
+interfaces for the single-site and multi-site forecasting pipelines.
+
+The application allows a user to provide input data, select the forecasting workflow, and
+inspect the resulting predictions, metrics, and visualizations. The final backend uses the
+frozen model artifacts rather than starting a new training process when a forecast request is
+made.
+
+This separation is useful for the research workflow because the models used to produce the
+reported results can remain fixed while the web interface is used for inference and
+demonstration.
+
+The deployed system is therefore not intended to replace the research evaluation pipeline.
+Instead, it provides a practical interface around the finalized forecasting models and makes
+the experimental work easier to inspect and demonstrate.
+
+% -------------------------------------------------------
+\section{Limitations and Future Work}
+% -------------------------------------------------------
+
+The most important limitation of the current study is the six-hour forecast horizon. The
+problem motivating the work targets substantially longer operational forecasts, including
+24--48 hours. The current results should therefore not be interpreted as evidence that the
+system already satisfies that operational requirement.
+
+A second limitation is the difference in evaluation units between the two experiments.
+Single-site metrics are reported in near-normalized units, while the multi-site metrics are
+reported in real concentration units. This prevents direct numerical comparison of the MAE
+values between the two experiments.
+
+The multi-site study is also limited to seven monitoring stations. The final graph checkpoints
+were trained and evaluated for this configuration, so conclusions about other station layouts
+or larger geographic areas require additional experiments.
+
+Another limitation is the difficulty of forecasting high-pollution spikes. The current models
+can underestimate extreme values, which is particularly important for an early-warning
+application. The present study does not include a dedicated extreme-event objective or
+uncertainty calibration.
+
+Finally, the dynamic graph is based on available wind information and does not model the full
+vertical structure of atmospheric transport. Real pollutant movement can depend on processes
+that are not captured by a surface-wind-based relationship alone.
+
+Future work will focus on:
+
+\begin{enumerate}
+\item Extending the forecasting horizon to 24 and 48 hours.
+\item Improving the prediction of high-pollution episodes using spike-aware objectives or
+sampling strategies.
+\item Adding calibrated predictive uncertainty to the forecasts.
+\item Learning spatial relationships directly from data rather than relying only on
+predefined geographic and wind-based relationships.
+\item Incorporating additional emission-related information such as traffic, fire, and
+industrial activity proxies where suitable data are available.
+\item Connecting the deployed system to continuously updated meteorological and
+satellite feeds for genuinely real-time forecasting.
+\end{enumerate}
+
+% -------------------------------------------------------
+\section{Conclusion}
+% -------------------------------------------------------
+
+StratoWatch presents a practical study of short-horizon O$_3$ and NO$_2$ forecasting at both
+single-site and multi-site scales. At the single-site level, XGBoost gives the strongest
+overall result among the evaluated models, with an MAE of 0.4039, RMSE of 0.5906, and
+$R^2$ of 0.3848 in the near-normalized evaluation units.
+
+The multi-site experiment gives a more mixed picture. The plain ST-Transformer obtains the
+lowest MAE at 18.8349~$\mu$g/m$^3$, while the Dynamic Wind Graph ST-Transformer obtains the
+lowest RMSE and highest $R^2$. The Static Graph ST-Transformer remains competitive. These
+results suggest that explicit spatial relationships can provide useful information, but the
+benefit is metric-dependent rather than a uniform improvement over the non-graph model.
+
+The experiments also show that forecasting becomes more difficult as the prediction horizon
+increases and that high-pollution episodes remain challenging. These observations are
+important because a forecasting system intended for early warning should eventually be
+evaluated specifically on the events that matter most operationally.
+
+The current StratoWatch system is therefore best viewed as a short-horizon research prototype
+and evaluation platform. Its main value at this stage is not claiming a finished operational
+forecasting solution, but providing a reproducible comparison of several forecasting
+approaches and a working system in which those models can be evaluated and demonstrated.
+
+% -------------------------------------------------------
+\section*{Data and Code Availability}
+% -------------------------------------------------------
+
+The StratoWatch source code, model implementations, preprocessing pipeline, evaluation
+artifacts, and web application are maintained in the project's public GitHub repository.
+
+Ground-level air-quality observations were obtained from CPCB-related sources, while
+satellite-derived atmospheric information is based on Sentinel-5P/TROPOMI products and other
+environmental data used by the project. Redistribution of third-party data remains subject
+to the terms and conditions of the respective providers.
+
+% -------------------------------------------------------
+\section*{Acknowledgment}
+% -------------------------------------------------------
+
+The author thanks the open-source communities behind PyTorch, XGBoost, scikit-learn,
+FastAPI, React, and the broader scientific software ecosystem used in this work. The author
+also acknowledges the providers of the ground-level air-quality, meteorological, and
+satellite-derived datasets used in the study.
+
+% -------------------------------------------------------
+% REFERENCES
+% -------------------------------------------------------
+
+\begin{thebibliography}{00}
+
+\bibitem{vaswani}
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+L. Kaiser, and I. Polosukhin, ``Attention is all you need,'' in
+\emph{Advances in Neural Information Processing Systems (NeurIPS)}, vol. 30,
+2017, pp. 5998--6008.
+
+\bibitem{xgboost}
+T. Chen and C. Guestrin, ``XGBoost: A scalable tree boosting system,'' in
+\emph{Proc. 22nd ACM SIGKDD International Conference on Knowledge Discovery
+and Data Mining (KDD)}, 2016, pp. 785--794.
+
+\bibitem{lstm}
+S. Hochreiter and J. Schmidhuber, ``Long short-term memory,''
+\emph{Neural Computation}, vol. 9, no. 8, pp. 1735--1780, Nov. 1997.
+
+\bibitem{tcn}
+S. Bai, J. Z. Kolter, and V. Koltun, ``An empirical evaluation of generic
+convolutional and recurrent networks for sequence modeling,''
+\emph{arXiv preprint arXiv:1803.01271}, 2018.
+
+\bibitem{graphwavenet}
+Z. Wu, S. Pan, G. Long, J. Jiang, and C. Zhang, ``Graph WaveNet for deep
+spatial-temporal graph modeling,'' in \emph{Proc. 28th International Joint
+Conference on Artificial Intelligence (IJCAI)}, 2019, pp. 1907--1913.
+
+\bibitem{informer}
+H. Zhou, S. Zhang, J. Peng, J. Zhang, J. Li, W. Xiong, and W. Zhang,
+``Informer: Beyond efficient Transformer for long sequence time-series
+forecasting,'' in \emph{Proc. AAAI Conference on Artificial Intelligence},
+vol. 35, no. 12, 2021, pp. 11106--11115.
+
+\bibitem{agcrn}
+L. Bai, L. Yao, C. Li, X. Wang, and C. Wang, ``Adaptive graph convolutional
+recurrent network for traffic forecasting,'' in
+\emph{Advances in Neural Information Processing Systems (NeurIPS)},
+vol. 33, 2020.
+
+\bibitem{dcrnn}
+Y. Li, R. Yu, C. Shahabi, and Y. Liu, ``Diffusion convolutional recurrent
+neural network: Data-driven traffic forecasting,'' in
+\emph{Proc. International Conference on Learning Representations (ICLR)}, 2018.
+
+\bibitem{ceemdan2025}
+S. He, Y. Liu, J. Peng, D. Xu, and Y. Wang, ``A CEEMDAN-GNN-transformer
+hybrid model for air quality index forecasting: a case study of Chang'an
+town, Dongguan, China,'' \emph{Frontiers in Environmental Science},
+vol. 13, art. 1653446, 2025.
+
+\bibitem{estgcn2025}
+M. Panja, T. Chakraborty, A. Biswas, and S. Deb, ``E-STGCN: Extreme
+spatiotemporal graph convolutional networks for air quality forecasting,''
+\emph{arXiv preprint arXiv:2411.12258}, 2025.
+
+\end{thebibliography}
+
+\end{document}
